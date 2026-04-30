@@ -68,6 +68,7 @@ Current local status:
 
 - Core Cloudflare, Hetzner, and GitHub tokens are present in local `~/.profile`.
 - The Crabbox Cloudflare token is mirrored to MacBook Pro `~/.profile`.
+- `CRABBOX_COORDINATOR` and `CRABBOX_COORDINATOR_TOKEN` are present in local and MacBook Pro `~/.profile`.
 - GitHub OAuth client ID and secret are present in local and MacBook Pro `~/.profile`.
 - Cloudflare Access GitHub IdP is created.
 - Cloudflare Access fallback app is created for `crabbox.clawd.bot`.
@@ -223,20 +224,34 @@ Deployment should:
 6. Configure route/custom domain on `crabbox.clawd.bot`.
 7. Verify `/v1/health` on the fallback domain.
 
-Use `npx wrangler` from the Worker package unless `wrangler` is installed globally. Do not assume `hcloud` is installed; the implementation can use the Hetzner API directly from Go.
+Use `npx wrangler` from the Worker package unless `wrangler` is installed globally. Do not assume `hcloud` is installed; the implementation can use the Hetzner API directly from Go or from the Worker.
+
+Current deployed coordinator:
+
+```text
+https://crabbox-coordinator.steipete.workers.dev
+crabbox.clawd.bot/* -> crabbox-coordinator, protected by Cloudflare Access
+```
+
+Current Worker secrets:
+
+```text
+HETZNER_TOKEN
+CRABBOX_SHARED_TOKEN
+```
 
 ## Verified OpenClaw Run
 
-Warm-run command from `/Users/steipete/Projects/openclaw`:
+Warm-run command from `/Users/steipete/Projects/openclaw` through the Cloudflare coordinator:
 
 ```sh
-CI=1 /usr/bin/time -p /Users/steipete/Projects/crabbox/bin/crabbox run --id cbx_f782c469c9ce -- pnpm test:changed:max
+CI=1 /usr/bin/time -p /Users/steipete/Projects/crabbox/bin/crabbox run --id cbx_f60f47cbc879 -- pnpm test:changed:max
 ```
 
 Result:
 
 - 61 Vitest shards completed successfully.
-- End-to-end wall time: 93.17 seconds.
+- End-to-end warm wall time: 93.66 seconds.
 - Runner class: requested `beast`, actual fallback `cpx62`.
 - Sync path: rsync overlay plus remote Git hydrate for shallow checkout merge-base support.
 

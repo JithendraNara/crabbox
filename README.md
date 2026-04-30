@@ -2,7 +2,7 @@
 
 Crabbox is an open source remote testbox runner for OpenClaw maintainers. It gives a Blacksmith Testboxes-style local loop on owned Hetzner capacity: provision or reuse a warm Linux box, sync the current dirty checkout, run a command remotely, stream output, and clean up.
 
-The current implementation is a direct Go CLI that talks to Hetzner Cloud and SSH. The planned shared control plane is a Cloudflare Worker plus Durable Object coordinator; see [docs/mvp-plan.md](docs/mvp-plan.md).
+The current implementation is a Go CLI plus a Cloudflare Worker/Durable Object coordinator. The CLI can also fall back to direct Hetzner Cloud calls when `CRABBOX_COORDINATOR` is unset.
 
 ## Status
 
@@ -14,6 +14,9 @@ Working today:
 - `crabbox stop`
 - `crabbox pool list`
 - `crabbox machine cleanup`
+- Cloudflare Worker coordinator on Workers/Durable Objects
+- bearer-token coordinator auth for automation
+- Cloudflare route for `crabbox.clawd.bot/*`
 - Hetzner server provisioning with class fallback
 - cloud-init bootstrap for Node 22, pnpm, Docker, Git, and rsync
 - rsync overlay of local dirty worktrees
@@ -22,8 +25,6 @@ Working today:
 
 Not yet done:
 
-- Cloudflare coordinator API
-- Durable Object shared lease store
 - `crabbox login`
 - GitHub Actions/OIDC-compatible execution
 - untrusted multi-tenant isolation
@@ -36,6 +37,7 @@ Prerequisites:
 - `git`, `ssh`, `rsync`, and `curl`
 - Hetzner token in `HCLOUD_TOKEN` or `HETZNER_TOKEN`
 - SSH key at `~/.ssh/id_ed25519`, or set `CRABBOX_SSH_KEY`
+- deployed coordinator env in `CRABBOX_COORDINATOR` and `CRABBOX_COORDINATOR_TOKEN`
 
 Build:
 
@@ -47,6 +49,13 @@ Check local prerequisites and Hetzner access:
 
 ```sh
 bin/crabbox doctor
+```
+
+Use the deployed coordinator:
+
+```sh
+export CRABBOX_COORDINATOR=https://crabbox-coordinator.steipete.workers.dev
+bin/crabbox pool list
 ```
 
 Warm a reusable OpenClaw testbox:
@@ -80,18 +89,54 @@ beast     ccx63, ccx53, ccx43, cpx62, cx53
 
 During verification, Hetzner rejected `ccx63`, `ccx53`, and `ccx43` because of the account dedicated-core quota, so Crabbox fell back to `cpx62`.
 
-## OpenClaw Verification
+## Cloudflare Deployment
 
-Verified from `/Users/steipete/Projects/openclaw` on a warm fallback `cpx62` runner:
+Worker source lives in `worker/`.
+
+Local checks:
 
 ```sh
-CI=1 /usr/bin/time -p /Users/steipete/Projects/crabbox/bin/crabbox run --id cbx_f782c469c9ce -- pnpm test:changed:max
+npm ci --prefix worker
+npm run check --prefix worker
+npm test --prefix worker
+npm run build --prefix worker
+```
+
+Deploy:
+
+```sh
+export CLOUDFLARE_API_TOKEN="$CRABBOX_CLOUDFLARE_API_TOKEN"
+export CLOUDFLARE_ACCOUNT_ID="$CRABBOX_CLOUDFLARE_ACCOUNT_ID"
+npx wrangler deploy --config worker/wrangler.jsonc
+```
+
+Required Worker secrets:
+
+```text
+HETZNER_TOKEN
+CRABBOX_SHARED_TOKEN
+```
+
+The Worker is deployed at:
+
+```text
+https://crabbox-coordinator.steipete.workers.dev
+```
+
+The Cloudflare route `crabbox.clawd.bot/*` is also attached and currently protected by Cloudflare Access.
+
+## OpenClaw Verification
+
+Verified from `/Users/steipete/Projects/openclaw` on a Cloudflare-created fallback `cpx62` runner:
+
+```sh
+CI=1 /usr/bin/time -p /Users/steipete/Projects/crabbox/bin/crabbox run --id cbx_f60f47cbc879 -- pnpm test:changed:max
 ```
 
 Result:
 
 - 61 Vitest shards completed successfully.
-- End-to-end wall time was 93.17 seconds.
+- End-to-end warm wall time was 93.66 seconds through the Cloudflare coordinator path.
 - The timing includes rsync scan, remote Git hydration, command execution, and output streaming.
 
 For true Blacksmith Testboxes parity, raise the Hetzner dedicated-core quota and re-run on `ccx63`.
@@ -103,6 +148,8 @@ Environment variables:
 ```text
 HCLOUD_TOKEN or HETZNER_TOKEN     Hetzner Cloud API token
 CRABBOX_PROFILE                  default openclaw-check
+CRABBOX_COORDINATOR              optional coordinator URL
+CRABBOX_COORDINATOR_TOKEN        optional coordinator bearer token
 CRABBOX_DEFAULT_CLASS            default beast
 CRABBOX_HETZNER_LOCATION         default fsn1
 CRABBOX_HETZNER_IMAGE            default ubuntu-24.04
@@ -130,6 +177,10 @@ gofmt -w $(git ls-files '*.go')
 go vet ./...
 go test -race ./...
 go build -trimpath -o bin/crabbox ./cmd/crabbox
+npm ci --prefix worker
+npm run check --prefix worker
+npm test --prefix worker
+npm run build --prefix worker
 ```
 
 CI runs the same checks on pushes and pull requests.

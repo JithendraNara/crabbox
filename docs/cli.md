@@ -176,6 +176,8 @@ CRABBOX_LOG
 Provider/deploy variables live outside normal CLI operation:
 
 ```text
+CRABBOX_COORDINATOR
+CRABBOX_COORDINATOR_TOKEN
 CRABBOX_CLOUDFLARE_API_TOKEN
 CRABBOX_CLOUDFLARE_ACCOUNT_ID
 CRABBOX_CLOUDFLARE_ZONE_ID
@@ -208,4 +210,3 @@ JSON output:
 ```
 
 No progress bars when stdout is not a TTY.
-

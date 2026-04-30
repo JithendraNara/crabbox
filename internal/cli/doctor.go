@@ -25,6 +25,18 @@ func (a App) doctor(ctx context.Context, args []string) error {
 	}
 
 	cfg := defaultConfig()
+	if coord, ok, err := newCoordinatorClient(cfg); err != nil {
+		fmt.Fprintf(a.Stdout, "failed  coord    %v\n", err)
+		ok = false
+	} else if ok {
+		if err := coord.Health(ctx); err != nil {
+			fmt.Fprintf(a.Stdout, "failed  coord    %v\n", err)
+			ok = false
+		} else {
+			fmt.Fprintf(a.Stdout, "ok      coord    %s\n", cfg.Coordinator)
+		}
+	}
+
 	if _, err := os.Stat(cfg.SSHKey); err != nil {
 		fmt.Fprintf(a.Stdout, "missing ssh key %s\n", cfg.SSHKey)
 		ok = false

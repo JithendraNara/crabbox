@@ -21,6 +21,7 @@ MVP:
 - GitHub Access IdP is configured for the `openclaw` org.
 - Coordinator validates `Cf-Access-Jwt-Assertion`.
 - Coordinator maps Access identity to lease owner.
+- Workers.dev automation currently uses a shared bearer token while `crabbox login` and Access service-token support are completed.
 
 Target:
 
@@ -51,6 +52,7 @@ Rules:
 - Never accept secret values as command-line flag values.
 - Never log env values.
 - Redact known secret-looking strings in diagnostics.
+- `CRABBOX_SHARED_TOKEN` is stored as a Worker secret; local clients use `CRABBOX_COORDINATOR_TOKEN`.
 
 Profile allowlist example:
 

@@ -15,6 +15,23 @@ func (a App) pool(ctx context.Context, args []string) error {
 	if err := fs.Parse(args[1:]); err != nil {
 		return exit(2, "%v", err)
 	}
+	cfg := defaultConfig()
+	if coord, ok, err := newCoordinatorClient(cfg); err != nil {
+		return err
+	} else if ok {
+		machines, err := coord.Pool(ctx)
+		if err != nil {
+			return err
+		}
+		if *jsonOut {
+			return json.NewEncoder(a.Stdout).Encode(machines)
+		}
+		for _, s := range machines {
+			fmt.Fprintf(a.Stdout, "%-10d %-28s %-12s %-8s %-15s lease=%s keep=%s\n",
+				s.ID, s.Name, s.Status, s.ServerType, s.Host, s.Labels["lease"], s.Labels["keep"])
+		}
+		return nil
+	}
 	client, err := newHetznerClient()
 	if err != nil {
 		return err

@@ -171,7 +171,7 @@ And proves:
 ## Known Current Infra Facts
 
 - Direct CLI execution is implemented and verified. It can create/reuse a Hetzner server, bootstrap it, sync a local checkout with rsync, hydrate shallow Git history enough for changed-test detection, run commands over SSH, stream output, and release/delete leases.
-- The Cloudflare coordinator and Durable Object lease store remain the intended shared-control-plane path, but are not on the verified execution path yet.
+- The Cloudflare coordinator and Durable Object lease store are implemented and deployed. The CLI uses them when `CRABBOX_COORDINATOR` is set, and falls back to direct Hetzner otherwise.
 - Intended primary domain: `crabbox.openclaw.ai`.
 - Current Cloudflare-manageable fallback domain: `crabbox.clawd.bot`.
 - `openclaw.ai` is currently not visible as a Cloudflare zone in the available account; DNS is on Namecheap nameservers.
@@ -184,22 +184,21 @@ And proves:
 - GitHub OAuth client ID and secret are present in local and MacBook Pro `~/.profile`.
 - Cloudflare Access GitHub IdP `GitHub OpenClaw` exists.
 - Cloudflare Access app `Crabbox Coordinator` exists for `crabbox.clawd.bot`.
+- Worker `crabbox-coordinator` is deployed at `https://crabbox-coordinator.steipete.workers.dev` and routed from `crabbox.clawd.bot/*`.
+- Coordinator bearer auth uses `CRABBOX_COORDINATOR_TOKEN` locally and `CRABBOX_SHARED_TOKEN` in the Worker.
 - Hetzner token is available in local and Mac Studio `~/.profile`.
 - The Hetzner account currently hits a dedicated-core quota/resource limit for `ccx63`, `ccx53`, and `ccx43`. The `beast` class falls back to `cpx62` until quota is raised.
 - Public SSH on port 22 was not usable from the tested network path; cloud-init opens SSH on port 2222 and the CLI uses that by default.
-- OpenClaw verification on the fallback `cpx62` runner passed `CI=1 pnpm test:changed:max`, completing 61 Vitest shards in 93.17 seconds end-to-end for a warm run, including rsync scan and remote Git hydration.
+- OpenClaw verification through the Cloudflare coordinator on the fallback `cpx62` runner passed `CI=1 pnpm test:changed:max`, completing 61 Vitest shards in 93.66 seconds end-to-end for a warm run, including rsync scan and remote Git hydration.
 - GitHub org slug is `openclaw`.
 - `wrangler` and `hcloud` are not assumed to be globally installed; use `npx wrangler` and direct Hetzner API or document install steps.
 
 ## Next Implementation Milestones
 
 1. Raise Hetzner dedicated-core quota so `beast` can use `ccx63` instead of falling back to `cpx62`.
-2. Add Cloudflare Worker API skeleton with local tests.
-3. Add Durable Object lease store.
-4. Move direct Hetzner lease lifecycle behind the coordinator for shared pool use.
-5. Bind the Worker behind the existing Cloudflare Access fallback app.
-6. Configure the fallback route/custom domain on `crabbox.clawd.bot`.
-7. Add `crabbox login` and Access token handling.
-8. Add one-shot `run --profile` cleanup semantics for ephemeral servers.
-9. Add heartbeat support for long-running commands.
-10. Re-run OpenClaw `pnpm test:changed:max` on `ccx63` and compare against Blacksmith Testboxes.
+2. Add `crabbox login` and Cloudflare Access token handling.
+3. Add Cloudflare Access service-token support for non-browser CLI use on `crabbox.clawd.bot`.
+4. Add heartbeat support for long-running commands.
+5. Add one-shot `run --profile` cleanup semantics coverage in integration tests.
+6. Add coordinator admin cleanup/drain endpoints.
+7. Re-run OpenClaw `pnpm test:changed:max` on `ccx63` and compare against Blacksmith Testboxes.

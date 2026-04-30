@@ -58,6 +58,8 @@ Usage:
 
 Environment:
   HCLOUD_TOKEN or HETZNER_TOKEN
+  CRABBOX_COORDINATOR, optional Cloudflare coordinator URL
+  CRABBOX_COORDINATOR_TOKEN, optional coordinator bearer token
   CRABBOX_SSH_KEY, default ~/.ssh/id_ed25519
   CRABBOX_DEFAULT_CLASS, default beast`)
 }

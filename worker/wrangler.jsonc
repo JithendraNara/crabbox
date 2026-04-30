@@ -1,0 +1,28 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "crabbox-coordinator",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-04-30",
+  "workers_dev": true,
+  "preview_urls": false,
+  "routes": [
+    {
+      "pattern": "crabbox.clawd.bot/*",
+      "zone_name": "clawd.bot"
+    }
+  ],
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "FLEET",
+        "class_name": "FleetDurableObject"
+      }
+    ]
+  },
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": ["FleetDurableObject"]
+    }
+  ]
+}

@@ -10,6 +10,8 @@ type Config struct {
 	Profile     string
 	Class       string
 	ServerType  string
+	Coordinator string
+	CoordToken  string
 	Location    string
 	Image       string
 	SSHUser     string
@@ -32,6 +34,8 @@ func defaultConfig() Config {
 		Profile:     getenv("CRABBOX_PROFILE", "openclaw-check"),
 		Class:       class,
 		ServerType:  serverTypeForClass(class),
+		Coordinator: os.Getenv("CRABBOX_COORDINATOR"),
+		CoordToken:  os.Getenv("CRABBOX_COORDINATOR_TOKEN"),
 		Location:    getenv("CRABBOX_HETZNER_LOCATION", "fsn1"),
 		Image:       getenv("CRABBOX_HETZNER_IMAGE", "ubuntu-24.04"),
 		SSHUser:     getenv("CRABBOX_SSH_USER", "crabbox"),

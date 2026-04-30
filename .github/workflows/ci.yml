@@ -49,3 +49,35 @@ jobs:
 
       - name: Build
         run: go build -trimpath -o /tmp/crabbox ./cmd/crabbox
+
+  worker:
+    name: Worker
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Check out
+        uses: actions/checkout@v6
+
+      - name: Set up Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: worker/package-lock.json
+
+      - name: Install
+        run: npm ci
+        working-directory: worker
+
+      - name: Typecheck
+        run: npm run check
+        working-directory: worker
+
+      - name: Test
+        run: npm test
+        working-directory: worker
+
+      - name: Build
+        run: npm run build
+        working-directory: worker

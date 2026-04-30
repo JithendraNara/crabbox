@@ -24,7 +24,18 @@ func (a App) warmup(ctx context.Context, args []string) error {
 	cfg.ServerType = serverTypeForClass(*class)
 	cfg.TTL = *ttl
 
-	server, target, leaseID, err := a.acquire(ctx, cfg, *keep)
+	coord, useCoordinator, err := newCoordinatorClient(cfg)
+	if err != nil {
+		return err
+	}
+	var server Server
+	var target SSHTarget
+	var leaseID string
+	if useCoordinator {
+		server, target, leaseID, err = a.acquireCoordinator(ctx, cfg, coord, *keep)
+	} else {
+		server, target, leaseID, err = a.acquire(ctx, cfg, *keep)
+	}
 	if err != nil {
 		return err
 	}
@@ -64,10 +75,26 @@ func (a App) runCommand(ctx context.Context, args []string) error {
 	var leaseID string
 	var err error
 	acquired := false
+	coord, useCoordinator, err := newCoordinatorClient(cfg)
+	if err != nil {
+		return err
+	}
 	if *leaseIDFlag != "" {
-		server, target, leaseID, err = a.findLease(ctx, cfg, *leaseIDFlag)
+		if useCoordinator {
+			var lease CoordinatorLease
+			lease, err = coord.GetLease(ctx, *leaseIDFlag)
+			if err == nil {
+				server, target, leaseID = leaseToServerTarget(lease, cfg)
+			}
+		} else {
+			server, target, leaseID, err = a.findLease(ctx, cfg, *leaseIDFlag)
+		}
 	} else {
-		server, target, leaseID, err = a.acquire(ctx, cfg, *keep)
+		if useCoordinator {
+			server, target, leaseID, err = a.acquireCoordinator(ctx, cfg, coord, *keep)
+		} else {
+			server, target, leaseID, err = a.acquire(ctx, cfg, *keep)
+		}
 		acquired = true
 	}
 	if err != nil {
@@ -77,7 +104,11 @@ func (a App) runCommand(ctx context.Context, args []string) error {
 		defer func() {
 			if !*keep {
 				fmt.Fprintf(a.Stderr, "releasing %s server=%d\n", leaseID, server.ID)
-				_ = deleteByID(context.Background(), server.ID)
+				if useCoordinator {
+					_, _ = coord.ReleaseLease(context.Background(), leaseID, true)
+				} else {
+					_ = deleteByID(context.Background(), server.ID)
+				}
 			}
 		}()
 	}
@@ -110,6 +141,24 @@ func (a App) runCommand(ctx context.Context, args []string) error {
 		return ExitError{Code: code, Message: fmt.Sprintf("remote command exited %d", code)}
 	}
 	return nil
+}
+
+func (a App) acquireCoordinator(ctx context.Context, cfg Config, coord *CoordinatorClient, keep bool) (Server, SSHTarget, string, error) {
+	publicKey, err := publicKeyFor(cfg.SSHKey)
+	if err != nil {
+		return Server{}, SSHTarget{}, "", err
+	}
+	fmt.Fprintf(a.Stderr, "coordinator lease class=%s preferred_type=%s keep=%v\n", cfg.Class, cfg.ServerType, keep)
+	lease, err := coord.CreateLease(ctx, cfg, publicKey, keep)
+	if err != nil {
+		return Server{}, SSHTarget{}, "", err
+	}
+	server, target, leaseID := leaseToServerTarget(lease, cfg)
+	fmt.Fprintf(a.Stderr, "leased %s server=%d type=%s ip=%s via coordinator\n", leaseID, server.ID, server.ServerType.Name, target.Host)
+	if err := waitForSSH(ctx, target, a.Stderr); err != nil {
+		return Server{}, SSHTarget{}, "", err
+	}
+	return server, target, leaseID, nil
 }
 
 func (a App) acquire(ctx context.Context, cfg Config, keep bool) (Server, SSHTarget, string, error) {
@@ -202,6 +251,16 @@ func (a App) stop(ctx context.Context, args []string) error {
 		return exit(2, "usage: crabbox stop <lease-or-server-id>")
 	}
 	cfg := defaultConfig()
+	if coord, ok, err := newCoordinatorClient(cfg); err != nil {
+		return err
+	} else if ok {
+		lease, err := coord.ReleaseLease(ctx, args[0], true)
+		if err != nil {
+			return err
+		}
+		fmt.Fprintf(a.Stderr, "released lease=%s server=%d\n", lease.ID, lease.ServerID)
+		return nil
+	}
 	server, _, leaseID, err := a.findLease(ctx, cfg, args[0])
 	if err != nil {
 		return err
