@@ -2,7 +2,7 @@ import type { LeaseConfig } from "./config";
 
 export function cloudInit(config: LeaseConfig): string {
   return `#cloud-config
-package_update: true
+package_update: false
 package_upgrade: false
 users:
   - name: ${config.sshUser}
@@ -11,15 +11,6 @@ users:
     sudo: ['ALL=(ALL) NOPASSWD:ALL']
     ssh_authorized_keys:
       - ${config.sshPublicKey}
-packages:
-  - openssh-server
-  - ca-certificates
-  - curl
-  - git
-  - rsync
-  - build-essential
-  - docker.io
-  - jq
 write_files:
   - path: /etc/ssh/sshd_config.d/99-crabbox-port.conf
     permissions: '0644'
@@ -38,17 +29,38 @@ write_files:
       rsync --version >/dev/null
       docker --version
 runcmd:
-  - mkdir -p ${config.workRoot} /var/cache/crabbox/pnpm /var/cache/crabbox/npm
-  - chown -R ${config.sshUser}:${config.sshUser} ${config.workRoot} /var/cache/crabbox
-  - systemctl enable --now ssh
-  - systemctl restart ssh
-  - systemctl enable --now docker
-  - usermod -aG docker ${config.sshUser}
-  - curl -fsSL https://deb.nodesource.com/setup_22.x | bash -
-  - apt-get install -y nodejs
-  - corepack enable
-  - corepack prepare pnpm@10.33.2 --activate
-  - sudo -u ${config.sshUser} bash -lc 'pnpm config set store-dir /var/cache/crabbox/pnpm'
-  - crabbox-ready
+  - |
+    bash -euxo pipefail <<'BOOT'
+    export DEBIAN_FRONTEND=noninteractive
+    cat >/etc/apt/apt.conf.d/80-crabbox-retries <<'APT'
+    Acquire::Retries "8";
+    Acquire::http::Timeout "30";
+    Acquire::https::Timeout "30";
+    APT
+    retry() {
+      n=1
+      until "$@"; do
+        if [ "$n" -ge 8 ]; then
+          return 1
+        fi
+        sleep $((n * 5))
+        n=$((n + 1))
+      done
+    }
+    retry apt-get update
+    retry apt-get install -y --no-install-recommends openssh-server ca-certificates curl git rsync build-essential docker.io jq
+    mkdir -p ${config.workRoot} /var/cache/crabbox/pnpm /var/cache/crabbox/npm
+    chown -R ${config.sshUser}:${config.sshUser} ${config.workRoot} /var/cache/crabbox
+    systemctl enable --now ssh
+    systemctl restart ssh
+    systemctl enable --now docker
+    usermod -aG docker ${config.sshUser}
+    retry bash -c 'curl -fsSL https://deb.nodesource.com/setup_22.x | bash -'
+    retry apt-get install -y nodejs
+    corepack enable
+    retry corepack prepare pnpm@10.33.2 --activate
+    sudo -u ${config.sshUser} bash -lc 'pnpm config set store-dir /var/cache/crabbox/pnpm'
+    crabbox-ready
+    BOOT
 `;
 }

@@ -32,6 +32,50 @@ func TestRemoteCommandQuotesWorkdirEnvAndArgs(t *testing.T) {
 	}
 }
 
+func TestSSHArgsIncludeReliabilityOptions(t *testing.T) {
+	t.Setenv("HOME", "/tmp/crabbox-home")
+	got := strings.Join(sshArgs(SSHTarget{
+		User: "crabbox",
+		Host: "203.0.113.10",
+		Key:  "/tmp/key",
+		Port: "2222",
+	}, "true"), "\n")
+	for _, want := range []string{
+		"ConnectTimeout=10",
+		"ConnectionAttempts=3",
+		"ServerAliveInterval=15",
+		"ServerAliveCountMax=2",
+		"UserKnownHostsFile=/tmp/crabbox-home/.ssh/known_hosts",
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("sshArgs() missing %q in %q", want, got)
+		}
+	}
+}
+
+func TestSSHPortCandidatesPreferConfiguredPortWithFallback(t *testing.T) {
+	tests := map[string][]string{
+		"":     {"22"},
+		"22":   {"22"},
+		"2222": {"2222", "22"},
+	}
+	for in, want := range tests {
+		got := sshPortCandidates(in)
+		if strings.Join(got, ",") != strings.Join(want, ",") {
+			t.Fatalf("sshPortCandidates(%q)=%v want %v", in, got, want)
+		}
+	}
+}
+
+func TestIsBootstrapWaitError(t *testing.T) {
+	if !isBootstrapWaitError(exit(5, "timed out waiting for SSH on 203.0.113.10 during bootstrap")) {
+		t.Fatal("expected SSH timeout to be retryable")
+	}
+	if isBootstrapWaitError(exit(6, "rsync failed")) {
+		t.Fatal("sync failure must not be treated as retryable bootstrap")
+	}
+}
+
 func TestServerTypeForClass(t *testing.T) {
 	tests := map[string]string{
 		"standard": "ccx33",

@@ -28,7 +28,7 @@ developer laptop
 leased runner
 ```
 
-The **CLI** is the user-facing tool. It loads config from `~/.config/crabbox/config.json` or the macOS user config path, reads the local SSH public key, asks the broker for a lease, waits for SSH, rsyncs the current checkout, runs the requested command, streams output, and releases the lease unless `--keep` is set.
+The **CLI** is the user-facing tool. It loads config from `~/.config/crabbox/config.json` or the macOS user config path, reads the local SSH public key, asks the broker for a lease, waits for SSH, rsyncs the current checkout, rechecks SSH readiness, runs the requested command, streams output, and releases the lease unless `--keep` is set. SSH prefers the configured port and can fall back to port 22 during bootstrap.
 
 The **broker** is the Cloudflare Worker at `crabbox-coordinator.steipete.workers.dev`. It authenticates requests with `CRABBOX_SHARED_TOKEN`, routes all fleet operations through a single Durable Object, and owns cloud-provider credentials. Local machines do not need AWS or Hetzner API keys for the normal path.
 
@@ -39,7 +39,7 @@ The **provider layer** provisions capacity:
 - Hetzner: imports or reuses the SSH key, creates a server, applies Crabbox labels, and falls back across configured server types when quota or capacity rejects a request.
 - AWS: signs EC2 Query API calls inside the Worker, imports or reuses the SSH key pair, creates or reuses the `crabbox-runners` security group, launches one-time Spot instances, tags instances/volumes/Spot requests, and falls back across C7a instance sizes.
 
-The **runner** is just an Ubuntu machine bootstrapped by cloud-init. Bootstrap creates the `crabbox` user, enables SSH on port `2222`, installs Node 22, pnpm, Docker, Git, rsync, build tools, and prepares `/work/crabbox` plus shared package caches. It does not need broker credentials.
+The **runner** is just an Ubuntu machine bootstrapped by cloud-init. Bootstrap creates the `crabbox` user, enables SSH on port `2222`, installs Node 22, pnpm, Docker, Git, rsync, build tools, and prepares `/work/crabbox` plus shared package caches. Package installation runs through an explicit retrying bootstrap script so transient Ubuntu mirror errors do not strand the machine. It does not need broker credentials.
 
 The normal lifecycle is:
 
@@ -68,7 +68,7 @@ Working today:
 - Cloudflare route for `crabbox.clawd.bot/*`
 - Hetzner server provisioning with class fallback
 - AWS EC2 Spot provisioning with class fallback
-- cloud-init bootstrap for Node 22, pnpm, Docker, Git, and rsync
+- cloud-init bootstrap for Node 22, pnpm, Docker, Git, and rsync, with apt/corepack retries
 - rsync overlay of local dirty worktrees
 - shallow Git hydration for OpenClaw changed-test detection
 - SSH execution on port `2222`

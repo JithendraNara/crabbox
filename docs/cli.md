@@ -98,12 +98,16 @@ Behavior:
 
 1. Load config.
 2. Acquire a lease unless `--id` is provided.
-3. Sync current repo.
-4. Run command over SSH.
-5. Stream remote output.
-6. Heartbeat in the background.
-7. Release lease unless `--keep` is set.
-8. Exit with the remote command exit code.
+3. Verify SSH readiness.
+4. Sync current repo.
+5. Verify SSH readiness again after sync and before command execution. The configured SSH port is preferred, with port 22 as a bootstrap fallback when the runner exposes default SSH first.
+6. Run command over SSH.
+7. Stream remote output.
+8. Heartbeat in the background.
+9. Release lease unless `--keep` is set.
+10. Exit with the remote command exit code.
+
+Fresh non-kept leases retry once with a new machine when bootstrap never reaches SSH readiness. Existing leases and `--keep` runs are not retried automatically, so commands are not duplicated on a machine the user asked to keep. Runner bootstrap also retries apt, NodeSource, and corepack steps inside cloud-init before `crabbox-ready` is allowed to pass.
 
 Flags:
 

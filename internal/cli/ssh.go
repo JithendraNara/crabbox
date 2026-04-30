@@ -21,25 +21,53 @@ type SSHTarget struct {
 	Port string
 }
 
-func waitForSSH(ctx context.Context, target SSHTarget, stderr io.Writer) error {
-	deadline := time.Now().Add(12 * time.Minute)
+func waitForSSH(ctx context.Context, target *SSHTarget, stderr io.Writer) error {
+	return waitForSSHReady(ctx, target, stderr, "bootstrap", 20*time.Minute)
+}
+
+func waitForSSHReady(ctx context.Context, target *SSHTarget, stderr io.Writer, phase string, timeout time.Duration) error {
+	deadline := time.Now().Add(timeout)
 	for {
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}
 		if time.Now().After(deadline) {
-			return exit(5, "timed out waiting for SSH on %s", target.Host)
+			return exit(5, "timed out waiting for SSH on %s during %s", target.Host, phase)
 		}
-		conn, err := net.DialTimeout("tcp", net.JoinHostPort(target.Host, target.Port), 5*time.Second)
-		if err == nil {
+		reachablePort := ""
+		for _, port := range sshPortCandidates(target.Port) {
+			probe := *target
+			probe.Port = port
+			conn, err := net.DialTimeout("tcp", net.JoinHostPort(probe.Host, probe.Port), 5*time.Second)
+			if err != nil {
+				continue
+			}
 			_ = conn.Close()
-			if runSSHQuiet(ctx, target, "test -x /usr/local/bin/crabbox-ready && crabbox-ready >/tmp/crabbox-ready.log 2>&1") == nil {
+			if reachablePort == "" {
+				reachablePort = probe.Port
+			}
+			if runSSHQuiet(ctx, probe, "test -x /usr/local/bin/crabbox-ready && crabbox-ready >/tmp/crabbox-ready.log 2>&1") == nil {
+				if target.Port != probe.Port {
+					fmt.Fprintf(stderr, "using ssh port %s for %s (configured %s not ready)\n", probe.Port, target.Host, target.Port)
+					target.Port = probe.Port
+				}
 				return nil
 			}
 		}
-		fmt.Fprintf(stderr, "waiting for %s:%s bootstrap...\n", target.Host, target.Port)
+		if reachablePort != "" {
+			fmt.Fprintf(stderr, "waiting for %s:%s %s toolchain...\n", target.Host, reachablePort, phase)
+		} else {
+			fmt.Fprintf(stderr, "waiting for %s:%s %s...\n", target.Host, target.Port, phase)
+		}
 		time.Sleep(10 * time.Second)
 	}
+}
+
+func sshPortCandidates(port string) []string {
+	if port == "" || port == "22" {
+		return []string{"22"}
+	}
+	return []string{port, "22"}
 }
 
 func runSSHQuiet(ctx context.Context, target SSHTarget, remote string) error {
@@ -73,6 +101,9 @@ func sshArgs(target SSHTarget, remote string) []string {
 		"-o", "StrictHostKeyChecking=accept-new",
 		"-o", "UserKnownHostsFile=" + filepath.Join(os.Getenv("HOME"), ".ssh", "known_hosts"),
 		"-o", "ConnectTimeout=10",
+		"-o", "ConnectionAttempts=3",
+		"-o", "ServerAliveInterval=15",
+		"-o", "ServerAliveCountMax=2",
 		"-p", target.Port,
 		target.User + "@" + target.Host,
 		remote,
@@ -88,6 +119,11 @@ func rsync(ctx context.Context, target SSHTarget, src, dst string, excludes []st
 			"-i", shellQuote(target.Key),
 			"-o", "BatchMode=yes",
 			"-o", "StrictHostKeyChecking=accept-new",
+			"-o", "UserKnownHostsFile=" + shellQuote(filepath.Join(os.Getenv("HOME"), ".ssh", "known_hosts")),
+			"-o", "ConnectTimeout=10",
+			"-o", "ConnectionAttempts=3",
+			"-o", "ServerAliveInterval=15",
+			"-o", "ServerAliveCountMax=2",
 			"-p", shellQuote(target.Port),
 		}, " "),
 	}

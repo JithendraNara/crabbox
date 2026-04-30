@@ -43,9 +43,9 @@ func (a App) warmup(ctx context.Context, args []string) error {
 	var target SSHTarget
 	var leaseID string
 	if useCoordinator {
-		server, target, leaseID, err = a.acquireCoordinator(ctx, cfg, coord, *keep)
+		server, target, leaseID, err = a.acquireCoordinatorWithRetry(ctx, cfg, coord, *keep)
 	} else {
-		server, target, leaseID, err = a.acquire(ctx, cfg, *keep)
+		server, target, leaseID, err = a.acquireWithRetry(ctx, cfg, *keep)
 	}
 	if err != nil {
 		return err
@@ -112,9 +112,9 @@ func (a App) runCommand(ctx context.Context, args []string) error {
 		}
 	} else {
 		if useCoordinator {
-			server, target, leaseID, err = a.acquireCoordinator(ctx, cfg, coord, *keep)
+			server, target, leaseID, err = a.acquireCoordinatorWithRetry(ctx, cfg, coord, *keep)
 		} else {
-			server, target, leaseID, err = a.acquire(ctx, cfg, *keep)
+			server, target, leaseID, err = a.acquireWithRetry(ctx, cfg, *keep)
 		}
 		acquired = true
 	}
@@ -126,7 +126,9 @@ func (a App) runCommand(ctx context.Context, args []string) error {
 			if !*keep {
 				fmt.Fprintf(a.Stderr, "releasing %s server=%s\n", leaseID, server.DisplayID())
 				if useCoordinator {
-					_, _ = coord.ReleaseLease(context.Background(), leaseID, true)
+					if err := releaseCoordinatorLease(context.Background(), coord, leaseID); err != nil {
+						fmt.Fprintf(a.Stderr, "warning: release failed for %s: %v\n", leaseID, err)
+					}
 				} else {
 					_ = deleteServer(context.Background(), cfg, server)
 				}
@@ -141,11 +143,17 @@ func (a App) runCommand(ctx context.Context, args []string) error {
 	workdir := filepath.ToSlash(filepath.Join(cfg.WorkRoot, leaseID, repo.Name))
 	if !*noSync {
 		fmt.Fprintf(a.Stderr, "syncing %s -> %s:%s\n", repo.Root, target.Host, workdir)
+		if err := waitForSSHReady(ctx, &target, a.Stderr, "before sync", 2*time.Minute); err != nil {
+			return err
+		}
 		if err := runSSHQuiet(ctx, target, remoteMkdir(workdir)); err != nil {
 			return exit(7, "create remote workdir: %v", err)
 		}
 		if err := rsync(ctx, target, repo.Root, workdir, defaultExcludes(), a.Stdout, a.Stderr); err != nil {
 			return exit(6, "rsync failed: %v", err)
+		}
+		if err := waitForSSHReady(ctx, &target, a.Stderr, "after sync", 2*time.Minute); err != nil {
+			return err
 		}
 		if err := runSSHQuiet(ctx, target, remoteGitHydrate(workdir)); err != nil {
 			fmt.Fprintf(a.Stderr, "warning: remote git hydrate failed: %v\n", err)
@@ -156,6 +164,9 @@ func (a App) runCommand(ctx context.Context, args []string) error {
 		return nil
 	}
 
+	if err := waitForSSHReady(ctx, &target, a.Stderr, "before command", 2*time.Minute); err != nil {
+		return err
+	}
 	fmt.Fprintf(a.Stderr, "running on %s %s\n", target.Host, strings.Join(command, " "))
 	code := runSSHStream(ctx, target, remoteCommand(workdir, allowedEnv(), command), a.Stdout, a.Stderr)
 	if code != 0 {
@@ -176,10 +187,81 @@ func (a App) acquireCoordinator(ctx context.Context, cfg Config, coord *Coordina
 	}
 	server, target, leaseID := leaseToServerTarget(lease, cfg)
 	fmt.Fprintf(a.Stderr, "leased %s server=%d type=%s ip=%s via coordinator\n", leaseID, server.ID, server.ServerType.Name, target.Host)
-	if err := waitForSSH(ctx, target, a.Stderr); err != nil {
+	if err := waitForSSH(ctx, &target, a.Stderr); err != nil {
+		if !keep {
+			if releaseErr := releaseCoordinatorLease(context.Background(), coord, leaseID); releaseErr != nil {
+				fmt.Fprintf(a.Stderr, "warning: release failed after bootstrap error for %s: %v\n", leaseID, releaseErr)
+			}
+		}
 		return Server{}, SSHTarget{}, "", err
 	}
 	return server, target, leaseID, nil
+}
+
+func (a App) acquireCoordinatorWithRetry(ctx context.Context, cfg Config, coord *CoordinatorClient, keep bool) (Server, SSHTarget, string, error) {
+	var lastErr error
+	attempts := acquireAttempts(keep)
+	for attempt := 1; attempt <= attempts; attempt++ {
+		server, target, leaseID, err := a.acquireCoordinator(ctx, cfg, coord, keep)
+		if err == nil {
+			return server, target, leaseID, nil
+		}
+		lastErr = err
+		if attempt == attempts || !isBootstrapWaitError(err) {
+			return Server{}, SSHTarget{}, "", err
+		}
+		fmt.Fprintf(a.Stderr, "warning: bootstrap failed; retrying with fresh lease: %v\n", err)
+	}
+	return Server{}, SSHTarget{}, "", lastErr
+}
+
+func (a App) acquireWithRetry(ctx context.Context, cfg Config, keep bool) (Server, SSHTarget, string, error) {
+	var lastErr error
+	attempts := acquireAttempts(keep)
+	for attempt := 1; attempt <= attempts; attempt++ {
+		server, target, leaseID, err := a.acquire(ctx, cfg, keep)
+		if err == nil {
+			return server, target, leaseID, nil
+		}
+		lastErr = err
+		if attempt == attempts || !isBootstrapWaitError(err) {
+			return Server{}, SSHTarget{}, "", err
+		}
+		fmt.Fprintf(a.Stderr, "warning: bootstrap failed; retrying with fresh lease: %v\n", err)
+	}
+	return Server{}, SSHTarget{}, "", lastErr
+}
+
+func acquireAttempts(keep bool) int {
+	if keep {
+		return 1
+	}
+	return 2
+}
+
+func isBootstrapWaitError(err error) bool {
+	var exitErr ExitError
+	return AsExitError(err, &exitErr) &&
+		exitErr.Code == 5 &&
+		strings.Contains(exitErr.Message, "timed out waiting for SSH")
+}
+
+func releaseCoordinatorLease(ctx context.Context, coord *CoordinatorClient, leaseID string) error {
+	var lastErr error
+	for attempt := 1; attempt <= 5; attempt++ {
+		releaseCtx, cancel := context.WithTimeout(ctx, 60*time.Second)
+		_, err := coord.ReleaseLease(releaseCtx, leaseID, true)
+		cancel()
+		if err == nil {
+			return nil
+		}
+		lastErr = err
+		if attempt == 5 {
+			break
+		}
+		time.Sleep(time.Duration(attempt*2) * time.Second)
+	}
+	return lastErr
 }
 
 func (a App) acquire(ctx context.Context, cfg Config, keep bool) (Server, SSHTarget, string, error) {
@@ -215,7 +297,10 @@ func (a App) acquire(ctx context.Context, cfg Config, keep bool) (Server, SSHTar
 		return Server{}, SSHTarget{}, "", err
 	}
 	target := SSHTarget{User: cfg.SSHUser, Host: server.PublicNet.IPv4.IP, Key: cfg.SSHKey, Port: cfg.SSHPort}
-	if err := waitForSSH(ctx, target, a.Stderr); err != nil {
+	if err := waitForSSH(ctx, &target, a.Stderr); err != nil {
+		if !keep {
+			_ = deleteServer(context.Background(), cfg, server)
+		}
 		return Server{}, SSHTarget{}, "", err
 	}
 	server.Labels["state"] = "ready"
@@ -248,7 +333,10 @@ func (a App) acquireAWS(ctx context.Context, cfg Config, keep bool) (Server, SSH
 		return Server{}, SSHTarget{}, "", err
 	}
 	target := SSHTarget{User: cfg.SSHUser, Host: server.PublicNet.IPv4.IP, Key: cfg.SSHKey, Port: cfg.SSHPort}
-	if err := waitForSSH(ctx, target, a.Stderr); err != nil {
+	if err := waitForSSH(ctx, &target, a.Stderr); err != nil {
+		if !keep {
+			_ = client.DeleteServer(context.Background(), server.CloudID)
+		}
 		return Server{}, SSHTarget{}, "", err
 	}
 	server.Labels["state"] = "ready"
