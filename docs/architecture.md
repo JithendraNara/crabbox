@@ -1,0 +1,163 @@
+# Architecture
+
+## System Overview
+
+Crabbox has three main parts:
+
+- CLI: local Go binary used by maintainers.
+- Coordinator: Cloudflare Worker plus Durable Object state.
+- Workers: Hetzner or SSH-accessible machines that run commands.
+
+The coordinator leases machines. The CLI executes work. Machines do not need to call back to the coordinator in the MVP.
+
+```text
+developer laptop
+  crabbox CLI
+    |
+    | HTTPS JSON API, Cloudflare Access
+    v
+Cloudflare Worker
+  Durable Object lease state
+    |
+    | Hetzner API
+    v
+Hetzner machines
+
+developer laptop
+  |
+  | SSH + rsync
+  v
+leased machine
+```
+
+## Lease Flow
+
+1. CLI loads config and authenticates to Cloudflare Access.
+2. CLI sends `POST /v1/leases` with profile, TTL, repo metadata, and desired machine class.
+3. Coordinator validates identity and policy.
+4. Durable Object chooses an idle machine or asks the Hetzner provider to create one.
+5. Coordinator returns lease ID, machine address, SSH user, workdir, and expiry.
+6. CLI rsyncs files to the machine.
+7. CLI runs the command over SSH and streams stdout/stderr.
+8. CLI heartbeats while the command runs.
+9. CLI releases the lease when done.
+10. Durable Object alarm cleans up stale leases and expired machines.
+
+## Coordinator API
+
+MVP endpoints:
+
+```text
+GET  /v1/health
+GET  /v1/me
+GET  /v1/profiles
+GET  /v1/machines
+POST /v1/leases
+GET  /v1/leases
+GET  /v1/leases/{id}
+POST /v1/leases/{id}/heartbeat
+POST /v1/leases/{id}/extend
+POST /v1/leases/{id}/release
+POST /v1/machines/{id}/drain
+```
+
+Admin endpoints can be gated by GitHub team or explicit allowlist once GitHub IdP is active.
+
+## Durable Object State
+
+Use one fleet Durable Object for MVP. It owns all atomic scheduling decisions.
+
+Core tables:
+
+```sql
+machines(id, provider, provider_id, profile, class, state, address, ssh_user, labels_json, lease_id, created_at, updated_at, last_seen_at)
+leases(id, owner, profile, machine_id, state, command, repo, ttl_seconds, expires_at, created_at, updated_at, released_at)
+events(id, lease_id, machine_id, type, actor, message, payload_json, created_at)
+```
+
+State transitions:
+
+```text
+machine: provisioning -> idle -> leased -> idle
+machine: provisioning -> failed
+machine: leased -> draining -> idle|deleted
+lease: pending -> active -> released
+lease: pending|active -> expired
+lease: active -> failed
+```
+
+## Backends
+
+Owned backends:
+
+- `hetzner-static`: pre-created warm machines.
+- `hetzner-ephemeral`: created per lease or overflow.
+- `ssh-static`: manually managed machines reachable by SSH.
+
+Brokered backends, later:
+
+- `blacksmith`: wrap Blacksmith as a brokered backend, not owned capacity.
+- `runson` or GitHub runner-based systems if needed.
+
+MVP should implement `hetzner-ephemeral` and leave interfaces ready for `hetzner-static`.
+
+## Machine Bootstrap
+
+Bootstrap should produce machines with:
+
+- `crabbox` user.
+- SSH key-only auth.
+- Docker.
+- Git.
+- Node 22.
+- pnpm.
+- build-essential.
+- rsync.
+- writable `/work/crabbox`.
+- cleanup service or boot-time cleanup script.
+
+Prefer snapshots/images once bootstrap is proven. Cloud-init is acceptable for first pass.
+
+## Config Sources
+
+Config precedence:
+
+```text
+flags > env > repo-local crabbox.yaml > user config > shared fleet config > defaults
+```
+
+Shared fleet config is desired state only. It can define:
+
+- coordinator URL.
+- profiles.
+- machine classes.
+- backend defaults.
+- sync excludes.
+- env allowlists.
+- trusted projects.
+
+It must not store:
+
+- live leases.
+- API tokens.
+- SSH private keys.
+- provider secrets.
+
+## Failure Model
+
+Assume:
+
+- CLI can crash.
+- SSH can disconnect.
+- Machines can fail boot.
+- Hetzner API calls can race or partially complete.
+- Cloudflare Worker can retry requests.
+
+Therefore:
+
+- Lease creation must be idempotent where practical.
+- TTL cleanup must be authoritative.
+- Provider resources need labels for orphan cleanup.
+- Release should be safe to call multiple times.
+- Machine delete should tolerate already-deleted resources.
+
