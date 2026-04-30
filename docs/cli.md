@@ -39,8 +39,8 @@ crabbox doctor
 crabbox config show
 crabbox profiles list
 crabbox pool list
-crabbox warmup [--profile <name>] [--ttl <duration>]
-crabbox run [--profile <name>] [--ttl <duration>] [--class <name>] -- <command...>
+crabbox warmup [--provider hetzner|aws] [--profile <name>] [--ttl <duration>]
+crabbox run [--provider hetzner|aws] [--profile <name>] [--ttl <duration>] [--class <name>] -- <command...>
 crabbox shell [--id <lease-id>]
 crabbox sync [--id <lease-id>]
 crabbox download --id <lease-id> <remote-path> <local-path>
@@ -56,6 +56,12 @@ One-shot run:
 
 ```sh
 crabbox run --profile openclaw-check -- pnpm check:changed
+```
+
+AWS EC2 Spot run:
+
+```sh
+crabbox run --provider aws --class beast -- pnpm check:changed
 ```
 
 Warm a box, then reuse it:
@@ -100,8 +106,10 @@ Flags:
 
 ```text
 --id <lease-id>          reuse an existing lease
+--provider <name>        hetzner or aws
 --profile <name>        profile to run on
 --class <name>          machine class override
+--type <name>           provider server or instance type override
 --ttl <duration>        lease TTL, default from profile
 --workdir <path>        remote workdir override
 --env <name>            include one env var by exact name

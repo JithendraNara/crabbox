@@ -49,21 +49,23 @@ func (a App) Run(ctx context.Context, args []string) error {
 }
 
 func (a App) usage() {
-	fmt.Fprintln(a.Stdout, `crabbox leases remote Hetzner boxes, syncs a worktree, runs commands, and cleans up.
+	fmt.Fprintln(a.Stdout, `crabbox leases remote cloud boxes, syncs a worktree, runs commands, and cleans up.
 
 Usage:
   crabbox --version
   crabbox doctor
-  crabbox warmup [--profile openclaw-check] [--class beast] [--keep]
-  crabbox run [--profile openclaw-check] [--class beast] [--ttl 90m] [--keep] -- <command...>
+  crabbox warmup [--provider hetzner|aws] [--profile openclaw-check] [--class beast] [--keep]
+  crabbox run [--provider hetzner|aws] [--profile openclaw-check] [--class beast] [--ttl 90m] [--keep] -- <command...>
   crabbox pool list
   crabbox machine cleanup [--dry-run]
   crabbox stop <lease-or-server-id>
 
 Environment:
   HCLOUD_TOKEN or HETZNER_TOKEN
+  CRABBOX_PROVIDER, hetzner or aws
   CRABBOX_COORDINATOR, optional Cloudflare coordinator URL
   CRABBOX_COORDINATOR_TOKEN, optional coordinator bearer token
+  CRABBOX_AWS_REGION, default eu-west-1
   CRABBOX_SSH_KEY, default ~/.ssh/id_ed25519
   CRABBOX_DEFAULT_CLASS, default beast`)
 }

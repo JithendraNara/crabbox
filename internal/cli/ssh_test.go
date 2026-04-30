@@ -46,3 +46,18 @@ func TestServerTypeForClass(t *testing.T) {
 		}
 	}
 }
+
+func TestAWSServerTypeForClass(t *testing.T) {
+	tests := map[string]string{
+		"standard":     "c7a.8xlarge",
+		"fast":         "c7a.16xlarge",
+		"large":        "c7a.24xlarge",
+		"beast":        "c7a.48xlarge",
+		"c8a.24xlarge": "c8a.24xlarge",
+	}
+	for in, want := range tests {
+		if got := serverTypeForProviderClass("aws", in); got != want {
+			t.Fatalf("serverTypeForProviderClass(%q)=%q want %q", in, got, want)
+		}
+	}
+}

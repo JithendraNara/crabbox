@@ -11,11 +11,13 @@ func (a App) pool(ctx context.Context, args []string) error {
 		return exit(2, "usage: crabbox pool list [--json]")
 	}
 	fs := newFlagSet("pool list", a.Stderr)
+	provider := fs.String("provider", defaultConfig().Provider, "provider: hetzner or aws")
 	jsonOut := fs.Bool("json", false, "print JSON")
 	if err := fs.Parse(args[1:]); err != nil {
 		return exit(2, "%v", err)
 	}
 	cfg := defaultConfig()
+	cfg.Provider = *provider
 	if coord, ok, err := newCoordinatorClient(cfg); err != nil {
 		return err
 	} else if ok {
@@ -32,6 +34,24 @@ func (a App) pool(ctx context.Context, args []string) error {
 		}
 		return nil
 	}
+	if cfg.Provider == "aws" {
+		client, err := newAWSClient(ctx, cfg)
+		if err != nil {
+			return err
+		}
+		servers, err := client.ListCrabboxServers(ctx)
+		if err != nil {
+			return err
+		}
+		if *jsonOut {
+			return json.NewEncoder(a.Stdout).Encode(servers)
+		}
+		for _, s := range servers {
+			fmt.Fprintf(a.Stdout, "%-20s %-28s %-12s %-14s %-15s lease=%s keep=%s\n",
+				s.DisplayID(), s.Name, s.Status, s.ServerType.Name, s.PublicNet.IPv4.IP, s.Labels["lease"], s.Labels["keep"])
+		}
+		return nil
+	}
 	client, err := newHetznerClient()
 	if err != nil {
 		return err
@@ -44,8 +64,8 @@ func (a App) pool(ctx context.Context, args []string) error {
 		return json.NewEncoder(a.Stdout).Encode(servers)
 	}
 	for _, s := range servers {
-		fmt.Fprintf(a.Stdout, "%-10d %-28s %-12s %-8s %-15s lease=%s keep=%s\n",
-			s.ID, s.Name, s.Status, s.ServerType.Name, s.PublicNet.IPv4.IP, s.Labels["lease"], s.Labels["keep"])
+		fmt.Fprintf(a.Stdout, "%-20s %-28s %-12s %-14s %-15s lease=%s keep=%s\n",
+			s.DisplayID(), s.Name, s.Status, s.ServerType.Name, s.PublicNet.IPv4.IP, s.Labels["lease"], s.Labels["keep"])
 	}
 	return nil
 }
@@ -64,9 +84,34 @@ func (a App) machine(ctx context.Context, args []string) error {
 
 func (a App) cleanup(ctx context.Context, args []string) error {
 	fs := newFlagSet("machine cleanup", a.Stderr)
+	provider := fs.String("provider", defaultConfig().Provider, "provider: hetzner or aws")
 	dryRun := fs.Bool("dry-run", false, "only print")
 	if err := fs.Parse(args); err != nil {
 		return exit(2, "%v", err)
+	}
+	cfg := defaultConfig()
+	cfg.Provider = *provider
+	if cfg.Provider == "aws" {
+		awsClient, err := newAWSClient(ctx, cfg)
+		if err != nil {
+			return err
+		}
+		servers, err := awsClient.ListCrabboxServers(ctx)
+		if err != nil {
+			return err
+		}
+		for _, s := range servers {
+			if s.Labels["keep"] == "true" {
+				continue
+			}
+			fmt.Fprintf(a.Stderr, "delete server id=%s name=%s\n", s.DisplayID(), s.Name)
+			if !*dryRun {
+				if err := awsClient.DeleteServer(ctx, s.CloudID); err != nil {
+					return err
+				}
+			}
+		}
+		return nil
 	}
 	client, err := newHetznerClient()
 	if err != nil {
@@ -80,7 +125,7 @@ func (a App) cleanup(ctx context.Context, args []string) error {
 		if s.Labels["keep"] == "true" {
 			continue
 		}
-		fmt.Fprintf(a.Stderr, "delete server id=%d name=%s\n", s.ID, s.Name)
+		fmt.Fprintf(a.Stderr, "delete server id=%s name=%s\n", s.DisplayID(), s.Name)
 		if !*dryRun {
 			if err := client.DeleteServer(ctx, s.ID); err != nil {
 				return err

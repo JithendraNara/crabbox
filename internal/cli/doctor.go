@@ -9,6 +9,7 @@ import (
 
 func (a App) doctor(ctx context.Context, args []string) error {
 	fs := newFlagSet("doctor", a.Stderr)
+	provider := fs.String("provider", defaultConfig().Provider, "provider: hetzner or aws")
 	if err := fs.Parse(args); err != nil {
 		return exit(2, "%v", err)
 	}
@@ -25,6 +26,7 @@ func (a App) doctor(ctx context.Context, args []string) error {
 	}
 
 	cfg := defaultConfig()
+	cfg.Provider = *provider
 	if coord, ok, err := newCoordinatorClient(cfg); err != nil {
 		fmt.Fprintf(a.Stdout, "failed  coord    %v\n", err)
 		ok = false
@@ -47,17 +49,34 @@ func (a App) doctor(ctx context.Context, args []string) error {
 		fmt.Fprintf(a.Stdout, "ok      ssh-key  %s\n", cfg.SSHKey)
 	}
 
-	client, err := newHetznerClient()
-	if err != nil {
-		fmt.Fprintf(a.Stdout, "missing hcloud token\n")
-		ok = false
-	} else {
+	switch cfg.Provider {
+	case "aws":
+		client, err := newAWSClient(ctx, cfg)
+		if err != nil {
+			fmt.Fprintf(a.Stdout, "failed  aws      %v\n", err)
+			ok = false
+			break
+		}
 		servers, err := client.ListCrabboxServers(ctx)
 		if err != nil {
-			fmt.Fprintf(a.Stdout, "failed  hcloud   %v\n", err)
+			fmt.Fprintf(a.Stdout, "failed  aws      %v\n", err)
 			ok = false
 		} else {
-			fmt.Fprintf(a.Stdout, "ok      hcloud   crabbox_servers=%d default_type=%s\n", len(servers), cfg.ServerType)
+			fmt.Fprintf(a.Stdout, "ok      aws      crabbox_servers=%d region=%s default_type=%s\n", len(servers), cfg.AWSRegion, cfg.ServerType)
+		}
+	default:
+		client, err := newHetznerClient()
+		if err != nil {
+			fmt.Fprintf(a.Stdout, "missing hcloud token\n")
+			ok = false
+		} else {
+			servers, err := client.ListCrabboxServers(ctx)
+			if err != nil {
+				fmt.Fprintf(a.Stdout, "failed  hcloud   %v\n", err)
+				ok = false
+			} else {
+				fmt.Fprintf(a.Stdout, "ok      hcloud   crabbox_servers=%d default_type=%s\n", len(servers), cfg.ServerType)
+			}
 		}
 	}
 

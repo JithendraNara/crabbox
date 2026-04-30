@@ -1,8 +1,8 @@
 # Crabbox
 
-Crabbox is an open source remote testbox runner for OpenClaw maintainers. It gives a Blacksmith Testboxes-style local loop on owned Hetzner capacity: provision or reuse a warm Linux box, sync the current dirty checkout, run a command remotely, stream output, and clean up.
+Crabbox is an open source remote testbox runner for OpenClaw maintainers. It gives a Blacksmith Testboxes-style local loop on owned cloud capacity: provision or reuse a warm Linux box, sync the current dirty checkout, run a command remotely, stream output, and clean up.
 
-The current implementation is a Go CLI plus a Cloudflare Worker/Durable Object coordinator. The CLI can also fall back to direct Hetzner Cloud calls when `CRABBOX_COORDINATOR` is unset.
+The current implementation is a Go CLI plus a Cloudflare Worker/Durable Object coordinator. The CLI can use the coordinator for Hetzner, or direct provider calls for Hetzner and AWS EC2 Spot.
 
 ## Status
 
@@ -18,6 +18,7 @@ Working today:
 - bearer-token coordinator auth for automation
 - Cloudflare route for `crabbox.clawd.bot/*`
 - Hetzner server provisioning with class fallback
+- AWS EC2 Spot provisioning with class fallback
 - cloud-init bootstrap for Node 22, pnpm, Docker, Git, and rsync
 - rsync overlay of local dirty worktrees
 - shallow Git hydration for OpenClaw changed-test detection
@@ -35,7 +36,7 @@ Prerequisites:
 
 - Go 1.26+
 - `git`, `ssh`, `rsync`, and `curl`
-- Hetzner token in `HCLOUD_TOKEN` or `HETZNER_TOKEN`
+- Hetzner token in `HCLOUD_TOKEN` or `HETZNER_TOKEN`, or AWS credentials discoverable by the AWS SDK
 - SSH key at `~/.ssh/id_ed25519`, or set `CRABBOX_SSH_KEY`
 - deployed coordinator env in `CRABBOX_COORDINATOR` and `CRABBOX_COORDINATOR_TOKEN`
 
@@ -64,6 +65,14 @@ Warm a reusable OpenClaw testbox:
 bin/crabbox warmup --profile openclaw-check --class beast --keep
 ```
 
+Use AWS EC2 Spot directly:
+
+```sh
+export CRABBOX_PROVIDER=aws
+export CRABBOX_AWS_REGION=eu-west-1
+bin/crabbox warmup --class beast --keep
+```
+
 Run a command on an existing lease:
 
 ```sh
@@ -84,7 +93,7 @@ bin/crabbox --version
 
 ## Machine Classes
 
-`beast` is the default. It tries the biggest useful Hetzner machines first, then falls back if the account hits quota or capacity limits:
+`beast` is the default. Hetzner uses dedicated-server classes:
 
 ```text
 standard  ccx33, cpx62, cx53
@@ -94,6 +103,17 @@ beast     ccx63, ccx53, ccx43, cpx62, cx53
 ```
 
 During verification, Hetzner rejected `ccx63`, `ccx53`, and `ccx43` because of the account dedicated-core quota, so Crabbox fell back to `cpx62`.
+
+AWS uses EC2 Spot C7a classes:
+
+```text
+standard  c7a.8xlarge, c7a.4xlarge
+fast      c7a.16xlarge, c7a.12xlarge, c7a.8xlarge
+large     c7a.24xlarge, c7a.16xlarge, c7a.12xlarge
+beast     c7a.48xlarge, c7a.32xlarge, c7a.24xlarge, c7a.16xlarge
+```
+
+Set `CRABBOX_SERVER_TYPE` or pass `--type` to use another EC2 type such as `c8a.24xlarge`.
 
 ## Cloudflare Deployment
 
@@ -155,13 +175,22 @@ Environment variables:
 
 ```text
 HCLOUD_TOKEN or HETZNER_TOKEN     Hetzner Cloud API token
+AWS_PROFILE/AWS_*                AWS SDK credentials for CRABBOX_PROVIDER=aws
 CRABBOX_PROFILE                  default openclaw-check
+CRABBOX_PROVIDER                 default hetzner
 CRABBOX_COORDINATOR              optional coordinator URL
 CRABBOX_COORDINATOR_TOKEN        optional coordinator bearer token
 CRABBOX_DEFAULT_CLASS            default beast
+CRABBOX_SERVER_TYPE              provider-specific override
 CRABBOX_HETZNER_LOCATION         default fsn1
 CRABBOX_HETZNER_IMAGE            default ubuntu-24.04
 CRABBOX_HETZNER_SSH_KEY          default crabbox-steipete
+CRABBOX_AWS_REGION               default eu-west-1
+CRABBOX_AWS_AMI                  optional Ubuntu AMI override
+CRABBOX_AWS_SECURITY_GROUP_ID    optional security group override
+CRABBOX_AWS_SUBNET_ID            optional subnet override
+CRABBOX_AWS_INSTANCE_PROFILE     optional IAM instance profile name
+CRABBOX_AWS_ROOT_GB              default 400
 CRABBOX_SSH_KEY                  default ~/.ssh/id_ed25519
 CRABBOX_SSH_USER                 default crabbox
 CRABBOX_SSH_PORT                 default 2222

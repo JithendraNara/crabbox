@@ -136,9 +136,35 @@ Current direct-CLI status:
 - SSH listens on port 2222 because port 22 was not reachable in verification.
 - The verified kept lease was `cbx_f782c469c9ce` on server `128694755`, `cpx62`, `188.245.91.84`.
 
+## AWS EC2 Spot
+
+Use AWS as the first non-Hetzner burst backend. The CLI direct provider is selected with `CRABBOX_PROVIDER=aws` or `--provider aws`; the Cloudflare coordinator remains Hetzner-only for now.
+
+Required env is whatever the AWS SDK can resolve, such as:
+
+```text
+AWS_PROFILE
+AWS_ACCESS_KEY_ID
+AWS_SECRET_ACCESS_KEY
+AWS_SESSION_TOKEN
+```
+
+AWS-specific Crabbox env:
+
+```text
+CRABBOX_AWS_REGION               default eu-west-1
+CRABBOX_AWS_AMI                  optional Ubuntu 24.04 x86_64 AMI override
+CRABBOX_AWS_SECURITY_GROUP_ID    optional security group override
+CRABBOX_AWS_SUBNET_ID            optional subnet override
+CRABBOX_AWS_INSTANCE_PROFILE     optional IAM instance profile name
+CRABBOX_AWS_ROOT_GB              default 400
+```
+
+The direct provider imports the local SSH public key as an EC2 key pair when needed, creates or reuses a `crabbox-runners` security group when no security group is supplied, launches one-time Spot instances, tags instances and volumes with Crabbox lease metadata, and terminates non-kept instances after the command.
+
 ## Machine Classes
 
-Fleet config should define machine classes instead of hardcoding Hetzner types:
+Fleet config should define machine classes instead of hardcoding provider types. Current Hetzner direct defaults:
 
 ```yaml
 classes:
@@ -162,6 +188,24 @@ classes:
     serverTypes: [ccx63, ccx53, ccx43, cpx62, cx53]
     cpu: 48
     memory: 192gb
+```
+
+Current AWS direct defaults:
+
+```yaml
+classes:
+  standard:
+    provider: aws
+    serverTypes: [c7a.8xlarge, c7a.4xlarge]
+  fast:
+    provider: aws
+    serverTypes: [c7a.16xlarge, c7a.12xlarge, c7a.8xlarge]
+  large:
+    provider: aws
+    serverTypes: [c7a.24xlarge, c7a.16xlarge, c7a.12xlarge]
+  beast:
+    provider: aws
+    serverTypes: [c7a.48xlarge, c7a.32xlarge, c7a.24xlarge, c7a.16xlarge]
 ```
 
 Profiles choose a default class, and commands can override with `--class`.

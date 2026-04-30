@@ -20,6 +20,8 @@ type HetznerClient struct {
 }
 
 type Server struct {
+	CloudID   string
+	Provider  string
 	ID        int64             `json:"id"`
 	Name      string            `json:"name"`
 	Status    string            `json:"status"`
@@ -39,6 +41,13 @@ type SSHKey struct {
 	Name        string `json:"name"`
 	Fingerprint string `json:"fingerprint"`
 	PublicKey   string `json:"public_key"`
+}
+
+func (s Server) DisplayID() string {
+	if s.CloudID != "" {
+		return s.CloudID
+	}
+	return fmt.Sprint(s.ID)
 }
 
 func newHetznerClient() (*HetznerClient, error) {

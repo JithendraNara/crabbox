@@ -44,6 +44,9 @@ type CoordinatorMachine struct {
 }
 
 func newCoordinatorClient(cfg Config) (*CoordinatorClient, bool, error) {
+	if cfg.Provider != "hetzner" {
+		return nil, false, nil
+	}
 	if cfg.Coordinator == "" {
 		return nil, false, nil
 	}

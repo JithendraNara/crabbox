@@ -11,17 +11,23 @@ import (
 
 func (a App) warmup(ctx context.Context, args []string) error {
 	fs := newFlagSet("warmup", a.Stderr)
+	provider := fs.String("provider", defaultConfig().Provider, "provider: hetzner or aws")
 	profile := fs.String("profile", defaultConfig().Profile, "profile")
 	class := fs.String("class", defaultConfig().Class, "machine class")
+	serverType := fs.String("type", getenv("CRABBOX_SERVER_TYPE", ""), "provider server/instance type")
 	ttl := fs.Duration("ttl", 90*time.Minute, "lease ttl")
 	keep := fs.Bool("keep", true, "keep server after warmup")
 	if err := fs.Parse(args); err != nil {
 		return exit(2, "%v", err)
 	}
 	cfg := defaultConfig()
+	cfg.Provider = *provider
 	cfg.Profile = *profile
 	cfg.Class = *class
-	cfg.ServerType = serverTypeForClass(*class)
+	cfg.ServerType = *serverType
+	if cfg.ServerType == "" {
+		cfg.ServerType = serverTypeForProviderClass(cfg.Provider, *class)
+	}
 	cfg.TTL = *ttl
 
 	coord, useCoordinator, err := newCoordinatorClient(cfg)
@@ -39,15 +45,17 @@ func (a App) warmup(ctx context.Context, args []string) error {
 	if err != nil {
 		return err
 	}
-	fmt.Fprintf(a.Stdout, "leased %s server=%d type=%s ip=%s\n", leaseID, server.ID, server.ServerType.Name, target.Host)
+	fmt.Fprintf(a.Stdout, "leased %s provider=%s server=%s type=%s ip=%s\n", leaseID, cfg.Provider, server.DisplayID(), server.ServerType.Name, target.Host)
 	fmt.Fprintf(a.Stdout, "ready ssh=%s@%s:%s workroot=%s\n", target.User, target.Host, target.Port, cfg.WorkRoot)
 	return nil
 }
 
 func (a App) runCommand(ctx context.Context, args []string) error {
 	fs := newFlagSet("run", a.Stderr)
+	provider := fs.String("provider", defaultConfig().Provider, "provider: hetzner or aws")
 	profile := fs.String("profile", defaultConfig().Profile, "profile")
 	class := fs.String("class", defaultConfig().Class, "machine class")
+	serverType := fs.String("type", getenv("CRABBOX_SERVER_TYPE", ""), "provider server/instance type")
 	ttl := fs.Duration("ttl", 90*time.Minute, "lease ttl")
 	leaseIDFlag := fs.String("id", "", "existing lease or server id")
 	keep := fs.Bool("keep", false, "keep server after command")
@@ -65,9 +73,13 @@ func (a App) runCommand(ctx context.Context, args []string) error {
 	}
 
 	cfg := defaultConfig()
+	cfg.Provider = *provider
 	cfg.Profile = *profile
 	cfg.Class = *class
-	cfg.ServerType = serverTypeForClass(*class)
+	cfg.ServerType = *serverType
+	if cfg.ServerType == "" {
+		cfg.ServerType = serverTypeForProviderClass(cfg.Provider, *class)
+	}
 	cfg.TTL = *ttl
 
 	var server Server
@@ -103,11 +115,11 @@ func (a App) runCommand(ctx context.Context, args []string) error {
 	if acquired {
 		defer func() {
 			if !*keep {
-				fmt.Fprintf(a.Stderr, "releasing %s server=%d\n", leaseID, server.ID)
+				fmt.Fprintf(a.Stderr, "releasing %s server=%s\n", leaseID, server.DisplayID())
 				if useCoordinator {
 					_, _ = coord.ReleaseLease(context.Background(), leaseID, true)
 				} else {
-					_ = deleteByID(context.Background(), server.ID)
+					_ = deleteServer(context.Background(), cfg, server)
 				}
 			}
 		}()
@@ -162,6 +174,9 @@ func (a App) acquireCoordinator(ctx context.Context, cfg Config, coord *Coordina
 }
 
 func (a App) acquire(ctx context.Context, cfg Config, keep bool) (Server, SSHTarget, string, error) {
+	if cfg.Provider == "aws" {
+		return a.acquireAWS(ctx, cfg, keep)
+	}
 	client, err := newHetznerClient()
 	if err != nil {
 		return Server{}, SSHTarget{}, "", err
@@ -178,7 +193,7 @@ func (a App) acquire(ctx context.Context, cfg Config, keep bool) (Server, SSHTar
 		cfg.ProviderKey = providerKey.Name
 	}
 	leaseID := newLeaseID()
-	fmt.Fprintf(a.Stderr, "provisioning lease=%s class=%s preferred_type=%s location=%s keep=%v\n", leaseID, cfg.Class, cfg.ServerType, cfg.Location, keep)
+	fmt.Fprintf(a.Stderr, "provisioning provider=hetzner lease=%s class=%s preferred_type=%s location=%s keep=%v\n", leaseID, cfg.Class, cfg.ServerType, cfg.Location, keep)
 	server, cfg, err := client.CreateServerWithFallback(ctx, cfg, publicKey, leaseID, keep, func(format string, args ...any) {
 		fmt.Fprintf(a.Stderr, format, args...)
 	})
@@ -201,6 +216,39 @@ func (a App) acquire(ctx context.Context, cfg Config, keep bool) (Server, SSHTar
 	return server, target, leaseID, nil
 }
 
+func (a App) acquireAWS(ctx context.Context, cfg Config, keep bool) (Server, SSHTarget, string, error) {
+	client, err := newAWSClient(ctx, cfg)
+	if err != nil {
+		return Server{}, SSHTarget{}, "", err
+	}
+	publicKey, err := publicKeyFor(cfg.SSHKey)
+	if err != nil {
+		return Server{}, SSHTarget{}, "", err
+	}
+	leaseID := newLeaseID()
+	fmt.Fprintf(a.Stderr, "provisioning provider=aws lease=%s class=%s preferred_type=%s region=%s keep=%v spot=true\n", leaseID, cfg.Class, cfg.ServerType, cfg.AWSRegion, keep)
+	server, cfg, err := client.CreateServerWithFallback(ctx, cfg, publicKey, leaseID, keep, func(format string, args ...any) {
+		fmt.Fprintf(a.Stderr, format, args...)
+	})
+	if err != nil {
+		return Server{}, SSHTarget{}, "", err
+	}
+	fmt.Fprintf(a.Stderr, "provisioned lease=%s server=%s type=%s\n", leaseID, server.DisplayID(), cfg.ServerType)
+	server, err = client.waitForServerIP(ctx, server.CloudID)
+	if err != nil {
+		return Server{}, SSHTarget{}, "", err
+	}
+	target := SSHTarget{User: cfg.SSHUser, Host: server.PublicNet.IPv4.IP, Key: cfg.SSHKey, Port: cfg.SSHPort}
+	if err := waitForSSH(ctx, target, a.Stderr); err != nil {
+		return Server{}, SSHTarget{}, "", err
+	}
+	server.Labels["state"] = "ready"
+	if err := client.SetTags(ctx, server.CloudID, server.Labels); err != nil {
+		fmt.Fprintf(a.Stderr, "warning: set tags: %v\n", err)
+	}
+	return server, target, leaseID, nil
+}
+
 func waitForServerIP(ctx context.Context, client *HetznerClient, id int64) (Server, error) {
 	deadline := time.Now().Add(5 * time.Minute)
 	for {
@@ -219,6 +267,9 @@ func waitForServerIP(ctx context.Context, client *HetznerClient, id int64) (Serv
 }
 
 func (a App) findLease(ctx context.Context, cfg Config, id string) (Server, SSHTarget, string, error) {
+	if cfg.Provider == "aws" {
+		return a.findAWSLease(ctx, cfg, id)
+	}
 	client, err := newHetznerClient()
 	if err != nil {
 		return Server{}, SSHTarget{}, "", err
@@ -246,35 +297,76 @@ func (a App) findLease(ctx context.Context, cfg Config, id string) (Server, SSHT
 	return Server{}, SSHTarget{}, "", exit(4, "lease/server not found: %s", id)
 }
 
+func (a App) findAWSLease(ctx context.Context, cfg Config, id string) (Server, SSHTarget, string, error) {
+	client, err := newAWSClient(ctx, cfg)
+	if err != nil {
+		return Server{}, SSHTarget{}, "", err
+	}
+	if strings.HasPrefix(id, "i-") {
+		server, err := client.GetServer(ctx, id)
+		if err != nil {
+			return Server{}, SSHTarget{}, "", err
+		}
+		leaseID := server.Labels["lease"]
+		if leaseID == "" {
+			leaseID = id
+		}
+		return server, SSHTarget{User: cfg.SSHUser, Host: server.PublicNet.IPv4.IP, Key: cfg.SSHKey, Port: cfg.SSHPort}, leaseID, nil
+	}
+	servers, err := client.ListCrabboxServers(ctx)
+	if err != nil {
+		return Server{}, SSHTarget{}, "", err
+	}
+	for _, server := range servers {
+		if server.Labels["lease"] == id || server.Name == id {
+			return server, SSHTarget{User: cfg.SSHUser, Host: server.PublicNet.IPv4.IP, Key: cfg.SSHKey, Port: cfg.SSHPort}, server.Labels["lease"], nil
+		}
+	}
+	return Server{}, SSHTarget{}, "", exit(4, "lease/server not found: %s", id)
+}
+
 func (a App) stop(ctx context.Context, args []string) error {
-	if len(args) != 1 {
+	fs := newFlagSet("stop", a.Stderr)
+	provider := fs.String("provider", defaultConfig().Provider, "provider: hetzner or aws")
+	if err := fs.Parse(args); err != nil {
+		return exit(2, "%v", err)
+	}
+	if fs.NArg() != 1 {
 		return exit(2, "usage: crabbox stop <lease-or-server-id>")
 	}
 	cfg := defaultConfig()
+	cfg.Provider = *provider
 	if coord, ok, err := newCoordinatorClient(cfg); err != nil {
 		return err
 	} else if ok {
-		lease, err := coord.ReleaseLease(ctx, args[0], true)
+		lease, err := coord.ReleaseLease(ctx, fs.Arg(0), true)
 		if err != nil {
 			return err
 		}
 		fmt.Fprintf(a.Stderr, "released lease=%s server=%d\n", lease.ID, lease.ServerID)
 		return nil
 	}
-	server, _, leaseID, err := a.findLease(ctx, cfg, args[0])
+	server, _, leaseID, err := a.findLease(ctx, cfg, fs.Arg(0))
 	if err != nil {
 		return err
 	}
-	fmt.Fprintf(a.Stderr, "deleting lease=%s server=%d name=%s\n", leaseID, server.ID, server.Name)
-	return deleteByID(ctx, server.ID)
+	fmt.Fprintf(a.Stderr, "deleting lease=%s server=%s name=%s\n", leaseID, server.DisplayID(), server.Name)
+	return deleteServer(ctx, cfg, server)
 }
 
-func deleteByID(ctx context.Context, id int64) error {
+func deleteServer(ctx context.Context, cfg Config, server Server) error {
+	if cfg.Provider == "aws" || server.Provider == "aws" || strings.HasPrefix(server.CloudID, "i-") {
+		client, err := newAWSClient(ctx, cfg)
+		if err != nil {
+			return err
+		}
+		return client.DeleteServer(ctx, server.CloudID)
+	}
 	client, err := newHetznerClient()
 	if err != nil {
 		return err
 	}
-	return client.DeleteServer(ctx, id)
+	return client.DeleteServer(ctx, server.ID)
 }
 
 func repoExists(path string) bool {
