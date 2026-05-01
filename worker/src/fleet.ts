@@ -136,6 +136,7 @@ export class FleetDurableObject implements DurableObject {
       host: "",
       sshUser: config.sshUser,
       sshPort: config.sshPort,
+      sshFallbackPorts: config.sshFallbackPorts,
       workRoot: config.workRoot,
       keep: config.keep,
       ttlSeconds: config.ttlSeconds,

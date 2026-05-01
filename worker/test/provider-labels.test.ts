@@ -14,6 +14,7 @@ describe("provider labels", () => {
       location: "eu-west-1",
       sshUser: "crabbox",
       sshPort: "2222",
+      sshFallbackPorts: ["22"],
       awsRegion: "eu-west-1",
       awsRootGB: 400,
       awsAMI: "",

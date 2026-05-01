@@ -55,6 +55,7 @@ export interface LeaseRequest {
   };
   sshUser?: string;
   sshPort?: string;
+  sshFallbackPorts?: string[];
   providerKey?: string;
   workRoot?: string;
   ttlSeconds?: number;
@@ -82,6 +83,7 @@ export interface LeaseRecord {
   host: string;
   sshUser: string;
   sshPort: string;
+  sshFallbackPorts?: string[];
   workRoot: string;
   keep: boolean;
   ttlSeconds: number;

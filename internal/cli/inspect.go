@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 )
 
 func (a App) inspect(ctx context.Context, args []string) error {
@@ -32,7 +33,7 @@ func (a App) inspect(ctx context.Context, args []string) error {
 	if *jsonOut {
 		return json.NewEncoder(a.Stdout).Encode(state)
 	}
-	fmt.Fprintf(a.Stdout, "id=%s\nslug=%s\nprovider=%s\nstate=%s\nserver=%s\nhost=%s\nssh=%s -p %s %s@%s\nidle_for=%s\nidle_timeout=%s\nlast_touched=%s\nexpires=%s\n", state.ID, blank(state.Slug, "-"), state.Provider, state.State, state.ServerID, state.Host, state.SSHKey, state.SSHPort, state.SSHUser, state.Host, blank(state.IdleFor, "-"), blank(state.IdleTimeout, "-"), blank(state.LastTouchedAt, "-"), blank(state.ExpiresAt, "-"))
+	fmt.Fprintf(a.Stdout, "id=%s\nslug=%s\nprovider=%s\nstate=%s\nserver=%s\nhost=%s\nssh=%s -p %s %s@%s\nssh_fallback_ports=%s\nidle_for=%s\nidle_timeout=%s\nlast_touched=%s\nexpires=%s\n", state.ID, blank(state.Slug, "-"), state.Provider, state.State, state.ServerID, state.Host, state.SSHKey, state.SSHPort, state.SSHUser, state.Host, blank(strings.Join(state.SSHFallbackPorts, ","), "-"), blank(state.IdleFor, "-"), blank(state.IdleTimeout, "-"), blank(state.LastTouchedAt, "-"), blank(state.ExpiresAt, "-"))
 	for key, value := range state.Labels {
 		fmt.Fprintf(a.Stdout, "label.%s=%s\n", key, value)
 	}

@@ -16,10 +16,31 @@ import (
 )
 
 type SSHTarget struct {
-	User string
-	Host string
-	Key  string
-	Port string
+	User          string
+	Host          string
+	Key           string
+	Port          string
+	FallbackPorts []string
+}
+
+func sshTargetFromConfig(cfg Config, host string) SSHTarget {
+	return sshTargetForLease(cfg, host, cfg.SSHUser, cfg.SSHPort)
+}
+
+func sshTargetForLease(cfg Config, host, user, port string) SSHTarget {
+	if user == "" {
+		user = cfg.SSHUser
+	}
+	if port == "" {
+		port = cfg.SSHPort
+	}
+	return SSHTarget{
+		User:          user,
+		Host:          host,
+		Key:           cfg.SSHKey,
+		Port:          port,
+		FallbackPorts: cfg.SSHFallbackPorts,
+	}
 }
 
 func waitForSSH(ctx context.Context, target *SSHTarget, stderr io.Writer) error {
@@ -36,7 +57,7 @@ func waitForSSHReady(ctx context.Context, target *SSHTarget, stderr io.Writer, p
 			return exit(5, "timed out waiting for SSH on %s during %s", target.Host, phase)
 		}
 		reachablePort := ""
-		for _, port := range sshPortCandidates(target.Port) {
+		for _, port := range sshPortCandidates(target.Port, target.FallbackPorts) {
 			probe := *target
 			probe.Port = port
 			conn, err := net.DialTimeout("tcp", net.JoinHostPort(probe.Host, probe.Port), 5*time.Second)
@@ -70,7 +91,7 @@ func probeSSHReady(ctx context.Context, target *SSHTarget, timeout time.Duration
 	}
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
-	for _, port := range sshPortCandidates(target.Port) {
+	for _, port := range sshPortCandidates(target.Port, target.FallbackPorts) {
 		probe := *target
 		probe.Port = port
 		dialer := net.Dialer{Timeout: minDuration(timeout, 2*time.Second)}
@@ -91,11 +112,25 @@ func sshReadyCommand() string {
 	return "test -x /usr/local/bin/crabbox-ready && crabbox-ready >/tmp/crabbox-ready.log 2>&1"
 }
 
-func sshPortCandidates(port string) []string {
-	if port == "" || port == "22" {
-		return []string{"22"}
+func sshPortCandidates(port string, fallbackPorts []string) []string {
+	if fallbackPorts == nil {
+		fallbackPorts = []string{"22"}
 	}
-	return []string{port, "22"}
+	return uniqueSSHPorts(append([]string{port}, fallbackPorts...))
+}
+
+func uniqueSSHPorts(ports []string) []string {
+	seen := make(map[string]bool, len(ports))
+	out := make([]string, 0, len(ports))
+	for _, port := range ports {
+		port = strings.TrimSpace(port)
+		if port == "" || seen[port] {
+			continue
+		}
+		seen[port] = true
+		out = append(out, port)
+	}
+	return out
 }
 
 func runSSHQuiet(ctx context.Context, target SSHTarget, remote string) error {

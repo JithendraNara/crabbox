@@ -23,6 +23,7 @@ const config: LeaseConfig = {
   capacityAvailabilityZones: [],
   sshUser: "crabbox",
   sshPort: "2222",
+  sshFallbackPorts: ["22"],
   providerKey: "crabbox-steipete",
   workRoot: "/work/crabbox",
   ttlSeconds: 1200,
@@ -44,6 +45,7 @@ describe("cloud-init bootstrap", () => {
     expect(got).toContain("curl --version >/dev/null");
     expect(got).toContain("test -f /var/lib/crabbox/bootstrapped");
     expect(got).toContain("test -w /work/crabbox");
+    expect(got).toContain("      Port 2222\n      Port 22");
     expect(got).toContain("touch /var/lib/crabbox/bootstrapped");
     expect(got).not.toContain("\npackages:\n");
     expect(got).not.toContain("go version");

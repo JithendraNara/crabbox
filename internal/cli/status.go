@@ -58,23 +58,24 @@ func (a App) status(ctx context.Context, args []string) error {
 }
 
 type statusView struct {
-	ID            string            `json:"id"`
-	Slug          string            `json:"slug,omitempty"`
-	Provider      string            `json:"provider"`
-	State         string            `json:"state"`
-	ServerID      string            `json:"serverId"`
-	ServerType    string            `json:"serverType"`
-	Host          string            `json:"host"`
-	SSHUser       string            `json:"sshUser"`
-	SSHPort       string            `json:"sshPort"`
-	SSHKey        string            `json:"sshKey"`
-	LastTouchedAt string            `json:"lastTouchedAt,omitempty"`
-	IdleFor       string            `json:"idleFor,omitempty"`
-	IdleTimeout   string            `json:"idleTimeout,omitempty"`
-	ExpiresAt     string            `json:"expiresAt,omitempty"`
-	Labels        map[string]string `json:"labels,omitempty"`
-	HasHost       bool              `json:"hasHost"`
-	Ready         bool              `json:"ready"`
+	ID               string            `json:"id"`
+	Slug             string            `json:"slug,omitempty"`
+	Provider         string            `json:"provider"`
+	State            string            `json:"state"`
+	ServerID         string            `json:"serverId"`
+	ServerType       string            `json:"serverType"`
+	Host             string            `json:"host"`
+	SSHUser          string            `json:"sshUser"`
+	SSHPort          string            `json:"sshPort"`
+	SSHFallbackPorts []string          `json:"sshFallbackPorts,omitempty"`
+	SSHKey           string            `json:"sshKey"`
+	LastTouchedAt    string            `json:"lastTouchedAt,omitempty"`
+	IdleFor          string            `json:"idleFor,omitempty"`
+	IdleTimeout      string            `json:"idleTimeout,omitempty"`
+	ExpiresAt        string            `json:"expiresAt,omitempty"`
+	Labels           map[string]string `json:"labels,omitempty"`
+	HasHost          bool              `json:"hasHost"`
+	Ready            bool              `json:"ready"`
 }
 
 func (a App) leaseStatus(ctx context.Context, cfg Config, id string) (statusView, error) {
@@ -89,23 +90,24 @@ func (a App) leaseStatus(ctx context.Context, cfg Config, id string) (statusView
 		hasHost := lease.Host != ""
 		ready := lease.State == "active" && hasHost && probeSSHReady(ctx, &target, 4*time.Second)
 		return statusView{
-			ID:            lease.ID,
-			Slug:          lease.Slug,
-			Provider:      blank(lease.Provider, cfg.Provider),
-			State:         lease.State,
-			ServerID:      leaseDisplayID(lease),
-			ServerType:    lease.ServerType,
-			Host:          lease.Host,
-			SSHUser:       target.User,
-			SSHPort:       target.Port,
-			SSHKey:        target.Key,
-			LastTouchedAt: lease.LastTouchedAt,
-			IdleFor:       idleForString(lease.LastTouchedAt, time.Now()),
-			IdleTimeout:   formatSecondsDuration(lease.IdleTimeoutSeconds),
-			ExpiresAt:     lease.ExpiresAt,
-			Labels:        map[string]string{"keep": fmt.Sprint(lease.Keep)},
-			HasHost:       hasHost,
-			Ready:         ready,
+			ID:               lease.ID,
+			Slug:             lease.Slug,
+			Provider:         blank(lease.Provider, cfg.Provider),
+			State:            lease.State,
+			ServerID:         leaseDisplayID(lease),
+			ServerType:       lease.ServerType,
+			Host:             lease.Host,
+			SSHUser:          target.User,
+			SSHPort:          target.Port,
+			SSHFallbackPorts: target.FallbackPorts,
+			SSHKey:           target.Key,
+			LastTouchedAt:    lease.LastTouchedAt,
+			IdleFor:          idleForString(lease.LastTouchedAt, time.Now()),
+			IdleTimeout:      formatSecondsDuration(lease.IdleTimeoutSeconds),
+			ExpiresAt:        lease.ExpiresAt,
+			Labels:           map[string]string{"keep": fmt.Sprint(lease.Keep)},
+			HasHost:          hasHost,
+			Ready:            ready,
 		}, nil
 	}
 	server, target, leaseID, err := a.findLease(ctx, cfg, id)
@@ -115,23 +117,24 @@ func (a App) leaseStatus(ctx context.Context, cfg Config, id string) (statusView
 	hasHost := server.PublicNet.IPv4.IP != ""
 	ready := hasHost && server.Labels["state"] != "provisioning" && probeSSHReady(ctx, &target, 4*time.Second)
 	return statusView{
-		ID:            leaseID,
-		Slug:          serverSlug(server),
-		Provider:      blank(server.Provider, cfg.Provider),
-		State:         blank(server.Labels["state"], server.Status),
-		ServerID:      server.DisplayID(),
-		ServerType:    server.ServerType.Name,
-		Host:          server.PublicNet.IPv4.IP,
-		SSHUser:       target.User,
-		SSHPort:       target.Port,
-		SSHKey:        target.Key,
-		LastTouchedAt: blank(leaseLabelTimeDisplay(server.Labels["last_touched_at"]), server.Labels["last_touched_at"]),
-		IdleFor:       idleForString(server.Labels["last_touched_at"], time.Now()),
-		IdleTimeout:   leaseLabelDurationDisplay(server.Labels["idle_timeout_secs"], server.Labels["idle_timeout"]),
-		ExpiresAt:     blank(leaseLabelTimeDisplay(server.Labels["expires_at"]), server.Labels["expires_at"]),
-		Labels:        server.Labels,
-		HasHost:       hasHost,
-		Ready:         ready,
+		ID:               leaseID,
+		Slug:             serverSlug(server),
+		Provider:         blank(server.Provider, cfg.Provider),
+		State:            blank(server.Labels["state"], server.Status),
+		ServerID:         server.DisplayID(),
+		ServerType:       server.ServerType.Name,
+		Host:             server.PublicNet.IPv4.IP,
+		SSHUser:          target.User,
+		SSHPort:          target.Port,
+		SSHFallbackPorts: target.FallbackPorts,
+		SSHKey:           target.Key,
+		LastTouchedAt:    blank(leaseLabelTimeDisplay(server.Labels["last_touched_at"]), server.Labels["last_touched_at"]),
+		IdleFor:          idleForString(server.Labels["last_touched_at"], time.Now()),
+		IdleTimeout:      leaseLabelDurationDisplay(server.Labels["idle_timeout_secs"], server.Labels["idle_timeout"]),
+		ExpiresAt:        blank(leaseLabelTimeDisplay(server.Labels["expires_at"]), server.Labels["expires_at"]),
+		Labels:           server.Labels,
+		HasHost:          hasHost,
+		Ready:            ready,
 	}, nil
 }
 

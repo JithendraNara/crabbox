@@ -28,7 +28,7 @@ Cloud machines are vanilla Ubuntu runners that hold no broker secrets. They are 
            |                                                | provider API
            |                                                v
            |                                +------------------------------+
-           |       SSH (port 2222) +        | Hetzner Cloud / AWS Spot     |
+           |       SSH (primary + fallback) | Hetzner Cloud / AWS Spot     |
            +----------- rsync ------------> | Ubuntu runner                |
                                             | /work/crabbox/<lease>/<repo> |
                                             +------------------------------+

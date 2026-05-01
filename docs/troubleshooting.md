@@ -89,7 +89,7 @@ Fixes:
 Symptoms:
 
 - lease exists but `crabbox run` waits until SSH timeout;
-- port `2222` is unreachable;
+- the primary SSH port, default `2222`, and all fallback ports are unreachable;
 - `crabbox-ready` is missing.
 
 Checks:
@@ -98,12 +98,14 @@ Checks:
 bin/crabbox inspect --id cbx_... --json
 ssh -p 2222 crabbox@HOST crabbox-ready
 ssh -p 2222 crabbox@HOST test -f /var/lib/crabbox/bootstrapped
+ssh -p 22 crabbox@HOST crabbox-ready
 ```
 
 Fixes:
 
 - wait for cloud-init to finish on fresh machines;
-- verify security group or firewall allows port `2222`;
+- verify security group or firewall allows the primary SSH port and the configured fallback ports;
+- set `CRABBOX_SSH_FALLBACK_PORTS=none` when fallback port 22 should not be opened or tried;
 - inspect provider console output for cloud-init failures;
 - retry the lease if bootstrap failed before creating the ready marker.
 

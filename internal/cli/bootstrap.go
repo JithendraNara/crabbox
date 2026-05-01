@@ -3,6 +3,10 @@ package cli
 import "fmt"
 
 func cloudInit(cfg Config, publicKey string) string {
+	portLines := ""
+	for _, port := range sshPortCandidates(cfg.SSHPort, cfg.SSHFallbackPorts) {
+		portLines += fmt.Sprintf("      Port %s\n", port)
+	}
 	return fmt.Sprintf(`#cloud-config
 package_update: false
 package_upgrade: false
@@ -17,8 +21,7 @@ write_files:
   - path: /etc/ssh/sshd_config.d/99-crabbox-port.conf
     permissions: '0644'
     content: |
-      Port 22
-      Port %[4]s
+%[4]s
       PasswordAuthentication no
   - path: /usr/local/bin/crabbox-ready
     permissions: '0755'
@@ -60,5 +63,5 @@ runcmd:
     systemctl restart ssh
     crabbox-ready
     BOOT
-`, cfg.SSHUser, publicKey, cfg.WorkRoot, cfg.SSHPort)
+`, cfg.SSHUser, publicKey, cfg.WorkRoot, portLines)
 }

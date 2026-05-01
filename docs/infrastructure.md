@@ -130,7 +130,10 @@ location: fsn1
 serverType: ccx63
 image: ubuntu-24.04
 sshUser: crabbox
-sshPort: 2222
+sshPort: "2222"
+# Ordered fallback ports tried after sshPort; use [] to disable fallback.
+sshFallbackPorts:
+  - "22"
 workdir: /work/crabbox
 ```
 
@@ -156,7 +159,7 @@ Current direct-CLI status:
 - The `beast` class tries `ccx63`, `ccx53`, `ccx43`, `cpx62`, then `cx53`.
 - Dedicated-core types currently fail on the available account quota, so the verified runner used `cpx62`.
 - Cloud-init installs only Crabbox plumbing: OpenSSH, curl/CA certificates, Git, rsync, jq, and a readiness probe through a retrying bootstrap script. Project runtimes and services are supplied by Actions hydration or repo-owned setup.
-- SSH prefers port 2222 and falls back to port 22 during AWS bootstrap when the base image exposes default SSH before the custom port restart lands.
+- SSH prefers the configured primary port, default `2222`, and then tries `ssh.fallbackPorts`, default `["22"]`. Set `ssh.fallbackPorts: []` or `CRABBOX_SSH_FALLBACK_PORTS=none` to disable fallback dialing/opening.
 - The verified kept lease was `cbx_f782c469c9ce` on server `128694755`, `cpx62`, `188.245.91.84`.
 
 ## AWS EC2 Spot
@@ -190,11 +193,12 @@ CRABBOX_AWS_SUBNET_ID            optional subnet override
 CRABBOX_AWS_INSTANCE_PROFILE     optional IAM instance profile name
 CRABBOX_AWS_ROOT_GB              default 400
 CRABBOX_AWS_SSH_CIDRS            optional comma-separated SSH source CIDRs
+CRABBOX_SSH_FALLBACK_PORTS       optional comma-separated SSH fallback ports, or none
 ```
 
 The AWS provider imports the local SSH public key as an EC2 key pair when needed, creates or reuses a `crabbox-runners` security group when no security group is supplied, launches one-time Spot instances, tags instances and volumes with Crabbox lease metadata, and terminates non-kept instances after the command.
 
-SSH ingress for AWS security groups is source-scoped. If `CRABBOX_AWS_SSH_CIDRS` is set, Crabbox adds those CIDRs. Otherwise, the CLI sends its detected outbound IPv4 `/32` to the broker; when that is unavailable, the Worker falls back to `CF-Connecting-IP` as `/32` or `/128`. Direct AWS mode uses the same CIDR setting when it creates the local security group. Crabbox also revokes the old managed `0.0.0.0/0` SSH ingress rule when the broker touches the managed security group. Supplying `CRABBOX_AWS_SECURITY_GROUP_ID` makes network policy your responsibility.
+SSH ingress for AWS security groups is source-scoped. If `CRABBOX_AWS_SSH_CIDRS` is set, Crabbox adds those CIDRs. Otherwise, the CLI sends its detected outbound IPv4 `/32` to the broker; when that is unavailable, the Worker falls back to `CF-Connecting-IP` as `/32` or `/128`. Direct and brokered AWS open the primary SSH port plus configured fallback ports. Crabbox also revokes the old managed `0.0.0.0/0` SSH ingress rule when the broker touches the managed security group. Supplying `CRABBOX_AWS_SECURITY_GROUP_ID` makes network policy your responsibility.
 
 ## Machine Classes
 

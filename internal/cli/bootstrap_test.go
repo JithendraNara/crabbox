@@ -16,6 +16,7 @@ func TestCloudInitUsesRetryingBootstrap(t *testing.T) {
 		"curl --version >/dev/null",
 		"test -f /var/lib/crabbox/bootstrapped",
 		"test -w /work/crabbox",
+		"      Port 2222\n      Port 22",
 		"touch /var/lib/crabbox/bootstrapped",
 	} {
 		if !strings.Contains(got, want) {

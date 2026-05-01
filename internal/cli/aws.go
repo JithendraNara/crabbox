@@ -364,7 +364,7 @@ func (c *AWSClient) ensureSecurityGroup(ctx context.Context, cfg Config) (string
 		}
 		groupID = aws.ToString(created.GroupId)
 	}
-	for _, port := range uniquePorts([]string{"22", cfg.SSHPort}) {
+	for _, port := range sshPortCandidates(cfg.SSHPort, cfg.SSHFallbackPorts) {
 		if err := c.allowTCP(ctx, groupID, port, cfg.AWSSSHCIDRs); err != nil && !strings.Contains(err.Error(), "InvalidPermission.Duplicate") {
 			return "", err
 		}
@@ -483,19 +483,6 @@ func isRetryableAWSProvisioningError(err error) bool {
 		strings.Contains(s, "VcpuLimitExceeded") ||
 		strings.Contains(s, "Unsupported") ||
 		strings.Contains(s, "InvalidParameterValue")
-}
-
-func uniquePorts(ports []string) []string {
-	seen := make(map[string]bool, len(ports))
-	out := make([]string, 0, len(ports))
-	for _, port := range ports {
-		if port == "" || seen[port] {
-			continue
-		}
-		seen[port] = true
-		out = append(out, port)
-	}
-	return out
 }
 
 func parsePort32(port string) (int32, bool) {

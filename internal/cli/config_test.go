@@ -84,6 +84,9 @@ cache:
   purgeOnRelease: true
 ssh:
   key: ~/.ssh/crabbox
+  fallbackPorts:
+    - "22"
+    - "2022"
 `), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -112,6 +115,9 @@ ssh:
 	}
 	if cfg.SSHKey != filepath.Join(home, ".ssh", "crabbox") {
 		t.Fatalf("SSHKey=%q", cfg.SSHKey)
+	}
+	if len(cfg.SSHFallbackPorts) != 2 || cfg.SSHFallbackPorts[0] != "22" || cfg.SSHFallbackPorts[1] != "2022" {
+		t.Fatalf("SSHFallbackPorts=%v", cfg.SSHFallbackPorts)
 	}
 	if !cfg.Sync.Checksum || cfg.Sync.GitSeed || cfg.Sync.BaseRef != "trunk" {
 		t.Fatalf("sync config not loaded: %#v", cfg.Sync)
@@ -155,6 +161,7 @@ func TestEnvOverridesConfig(t *testing.T) {
 	t.Setenv("CRABBOX_TTL", "3h")
 	t.Setenv("CRABBOX_IDLE_TIMEOUT", "20m")
 	t.Setenv("CRABBOX_AWS_SSH_CIDRS", "198.51.100.7/32,203.0.113.8/32")
+	t.Setenv("CRABBOX_SSH_FALLBACK_PORTS", "none")
 	path := userConfigPath()
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		t.Fatal(err)
@@ -172,6 +179,9 @@ func TestEnvOverridesConfig(t *testing.T) {
 	}
 	if len(cfg.AWSSSHCIDRs) != 2 || cfg.AWSSSHCIDRs[0] != "198.51.100.7/32" || cfg.AWSSSHCIDRs[1] != "203.0.113.8/32" {
 		t.Fatalf("AWSSSHCIDRs=%v", cfg.AWSSSHCIDRs)
+	}
+	if len(cfg.SSHFallbackPorts) != 0 {
+		t.Fatalf("SSHFallbackPorts=%v want disabled fallback", cfg.SSHFallbackPorts)
 	}
 }
 

@@ -41,16 +41,17 @@ func (a App) configShow(args []string) error {
 		return err
 	}
 	view := map[string]any{
-		"profile":     cfg.Profile,
-		"provider":    cfg.Provider,
-		"class":       cfg.Class,
-		"serverType":  cfg.ServerType,
-		"coordinator": cfg.Coordinator,
-		"brokerAuth":  tokenState(cfg.CoordToken),
-		"sshKey":      cfg.SSHKey,
-		"sshUser":     cfg.SSHUser,
-		"sshPort":     cfg.SSHPort,
-		"workRoot":    cfg.WorkRoot,
+		"profile":          cfg.Profile,
+		"provider":         cfg.Provider,
+		"class":            cfg.Class,
+		"serverType":       cfg.ServerType,
+		"coordinator":      cfg.Coordinator,
+		"brokerAuth":       tokenState(cfg.CoordToken),
+		"sshKey":           cfg.SSHKey,
+		"sshUser":          cfg.SSHUser,
+		"sshPort":          cfg.SSHPort,
+		"sshFallbackPorts": cfg.SSHFallbackPorts,
+		"workRoot":         cfg.WorkRoot,
 		"sync": map[string]any{
 			"exclude":     configuredExcludes(cfg),
 			"delete":      cfg.Sync.Delete,
@@ -124,7 +125,7 @@ func (a App) configShow(args []string) error {
 	fmt.Fprintf(a.Stdout, "config=%s\n", userConfigPath())
 	fmt.Fprintf(a.Stdout, "provider=%s class=%s type=%s profile=%s\n", cfg.Provider, cfg.Class, cfg.ServerType, cfg.Profile)
 	fmt.Fprintf(a.Stdout, "broker=%s auth=%s\n", blank(cfg.Coordinator, "-"), tokenState(cfg.CoordToken))
-	fmt.Fprintf(a.Stdout, "ssh=%s@<host>:%s key=%s\n", cfg.SSHUser, cfg.SSHPort, cfg.SSHKey)
+	fmt.Fprintf(a.Stdout, "ssh=%s@<host>:%s fallback_ports=%s key=%s\n", cfg.SSHUser, cfg.SSHPort, blank(strings.Join(cfg.SSHFallbackPorts, ","), "-"), cfg.SSHKey)
 	fmt.Fprintf(a.Stdout, "sync delete=%t checksum=%t git_seed=%t fingerprint=%t base_ref=%s excludes=%d timeout=%s\n", cfg.Sync.Delete, cfg.Sync.Checksum, cfg.Sync.GitSeed, cfg.Sync.Fingerprint, blank(cfg.Sync.BaseRef, "-"), len(configuredExcludes(cfg)), cfg.Sync.Timeout)
 	fmt.Fprintf(a.Stdout, "env allow=%s\n", strings.Join(cfg.EnvAllow, ","))
 	fmt.Fprintf(a.Stdout, "capacity market=%s strategy=%s fallback=%s regions=%s\n", cfg.Capacity.Market, cfg.Capacity.Strategy, cfg.Capacity.Fallback, blank(strings.Join(cfg.Capacity.Regions, ","), "-"))

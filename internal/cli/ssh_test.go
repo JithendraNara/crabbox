@@ -115,10 +115,21 @@ func TestSSHPortCandidatesPreferConfiguredPortWithFallback(t *testing.T) {
 		"2222": {"2222", "22"},
 	}
 	for in, want := range tests {
-		got := sshPortCandidates(in)
+		got := sshPortCandidates(in, nil)
 		if strings.Join(got, ",") != strings.Join(want, ",") {
 			t.Fatalf("sshPortCandidates(%q)=%v want %v", in, got, want)
 		}
+	}
+}
+
+func TestSSHPortCandidatesUseConfiguredFallbacks(t *testing.T) {
+	got := sshPortCandidates("2222", []string{"2022", "22", "2222", ""})
+	want := []string{"2222", "2022", "22"}
+	if strings.Join(got, ",") != strings.Join(want, ",") {
+		t.Fatalf("sshPortCandidates()=%v want %v", got, want)
+	}
+	if got := sshPortCandidates("2222", []string{}); strings.Join(got, ",") != "2222" {
+		t.Fatalf("sshPortCandidates(disabled fallback)=%v want [2222]", got)
 	}
 }
 

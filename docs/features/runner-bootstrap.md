@@ -12,7 +12,7 @@ Bootstrap creates:
 
 - the `crabbox` user;
 - SSH key-only access;
-- SSH on port `2222`;
+- SSH on the primary port, default `2222`, and configured fallback ports, default `22`;
 - `/work/crabbox`;
 - shared package caches.
 
@@ -26,7 +26,7 @@ Bootstrap installs:
 
 Bootstrap intentionally does not install project language runtimes such as Go, Node, pnpm, Docker, databases, or service dependencies. Those belong in GitHub Actions hydration, devcontainers, Nix, mise/asdf, or repository setup scripts. A machine should not pass readiness until `crabbox-ready` succeeds over SSH.
 
-The CLI prefers the configured SSH port and can fall back to port 22 during early bootstrap. Long term, snapshots or provider images can replace slow cloud-init once the bootstrap contract is stable.
+The CLI prefers the configured SSH port and can fall back through `ssh.fallbackPorts` during early bootstrap or operator-network egress restrictions. Set `ssh.fallbackPorts: []` or `CRABBOX_SSH_FALLBACK_PORTS=none` when the fallback should be disabled. Long term, snapshots or provider images can replace slow cloud-init once the bootstrap contract is stable.
 
 Related docs:
 

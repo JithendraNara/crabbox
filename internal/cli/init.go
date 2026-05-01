@@ -83,6 +83,9 @@ env:
 ssh:
   user: crabbox
   port: "2222"
+  # Ordered fallback ports tried after ssh.port; use [] to disable fallback.
+  fallbackPorts:
+    - "22"
 `, repoName)
 }
 

@@ -78,7 +78,7 @@ MVP SSH posture:
 - Dedicated `crabbox` user.
 - No password login.
 - No root login.
-- SSH listens on port 2222 in the verified direct-CLI path because port 22 was not reachable during Hetzner testing.
+- SSH listens on the configured primary port, default `2222`, plus configured fallback ports, default `22`, because port 22 is not reliable from every operator network path.
 - The CLI generates per-lease SSH keys under the user config directory for new leases.
 - Matching cloud SSH keys/key pairs are removed when Crabbox deletes the machine.
 - Work happens under `/work/crabbox`.

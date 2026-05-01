@@ -25,6 +25,7 @@ export interface LeaseConfig {
   capacityAvailabilityZones: string[];
   sshUser: string;
   sshPort: string;
+  sshFallbackPorts: string[];
   providerKey: string;
   workRoot: string;
   ttlSeconds: number;
@@ -67,6 +68,7 @@ export function leaseConfig(input: LeaseRequest): LeaseConfig {
     capacityAvailabilityZones: input.capacity?.availabilityZones ?? [],
     sshUser: input.sshUser ?? "crabbox",
     sshPort: input.sshPort ?? "2222",
+    sshFallbackPorts: validPorts(input.sshFallbackPorts ?? ["22"]),
     providerKey: input.providerKey ?? "crabbox-steipete",
     workRoot: input.workRoot ?? "/work/crabbox",
     ttlSeconds,
@@ -76,6 +78,10 @@ export function leaseConfig(input: LeaseRequest): LeaseConfig {
   };
 }
 
+export function sshPorts(config: Pick<LeaseConfig, "sshPort" | "sshFallbackPorts">): string[] {
+  return uniqueStrings([config.sshPort, ...config.sshFallbackPorts]);
+}
+
 export function validCIDRs(values: string[]): string[] {
   const cidrs = values.map((value) => value.trim()).filter(Boolean);
   return cidrs.filter(
@@ -83,6 +89,18 @@ export function validCIDRs(values: string[]): string[] {
       /^(\d{1,3}\.){3}\d{1,3}\/([0-9]|[1-2][0-9]|3[0-2])$/.test(cidr) ||
       /^[0-9a-f:]+\/([0-9]|[1-9][0-9]|1[0-1][0-9]|12[0-8])$/i.test(cidr),
   );
+}
+
+function validPorts(values: string[]): string[] {
+  return uniqueStrings(
+    values
+      .map((value) => value.trim())
+      .filter((value) => /^[1-9][0-9]{0,4}$/.test(value) && Number(value) <= 65_535),
+  );
+}
+
+function uniqueStrings(values: string[]): string[] {
+  return [...new Set(values.filter(Boolean))];
 }
 
 export function serverTypeForClass(machineClass: string): string {

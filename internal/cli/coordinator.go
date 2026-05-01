@@ -24,29 +24,30 @@ type CoordinatorClient struct {
 }
 
 type CoordinatorLease struct {
-	ID                 string `json:"id"`
-	Slug               string `json:"slug,omitempty"`
-	Provider           string `json:"provider"`
-	Owner              string `json:"owner"`
-	Org                string `json:"org"`
-	Profile            string `json:"profile"`
-	Class              string `json:"class"`
-	ServerType         string `json:"serverType"`
-	ServerID           int64  `json:"serverID"`
-	CloudID            string `json:"cloudID"`
-	ServerName         string `json:"serverName"`
-	Host               string `json:"host"`
-	SSHUser            string `json:"sshUser"`
-	SSHPort            string `json:"sshPort"`
-	WorkRoot           string `json:"workRoot"`
-	Keep               bool   `json:"keep"`
-	State              string `json:"state"`
-	TTLSeconds         int    `json:"ttlSeconds,omitempty"`
-	IdleTimeoutSeconds int    `json:"idleTimeoutSeconds,omitempty"`
-	CreatedAt          string `json:"createdAt,omitempty"`
-	UpdatedAt          string `json:"updatedAt,omitempty"`
-	LastTouchedAt      string `json:"lastTouchedAt,omitempty"`
-	ExpiresAt          string `json:"expiresAt"`
+	ID                 string   `json:"id"`
+	Slug               string   `json:"slug,omitempty"`
+	Provider           string   `json:"provider"`
+	Owner              string   `json:"owner"`
+	Org                string   `json:"org"`
+	Profile            string   `json:"profile"`
+	Class              string   `json:"class"`
+	ServerType         string   `json:"serverType"`
+	ServerID           int64    `json:"serverID"`
+	CloudID            string   `json:"cloudID"`
+	ServerName         string   `json:"serverName"`
+	Host               string   `json:"host"`
+	SSHUser            string   `json:"sshUser"`
+	SSHPort            string   `json:"sshPort"`
+	SSHFallbackPorts   []string `json:"sshFallbackPorts,omitempty"`
+	WorkRoot           string   `json:"workRoot"`
+	Keep               bool     `json:"keep"`
+	State              string   `json:"state"`
+	TTLSeconds         int      `json:"ttlSeconds,omitempty"`
+	IdleTimeoutSeconds int      `json:"idleTimeoutSeconds,omitempty"`
+	CreatedAt          string   `json:"createdAt,omitempty"`
+	UpdatedAt          string   `json:"updatedAt,omitempty"`
+	LastTouchedAt      string   `json:"lastTouchedAt,omitempty"`
+	ExpiresAt          string   `json:"expiresAt"`
 }
 
 type CoordinatorMachine struct {
@@ -252,6 +253,7 @@ func (c *CoordinatorClient) CreateLease(ctx context.Context, cfg Config, publicK
 		},
 		"sshUser":            cfg.SSHUser,
 		"sshPort":            cfg.SSHPort,
+		"sshFallbackPorts":   cfg.SSHFallbackPorts,
 		"providerKey":        cfg.ProviderKey,
 		"workRoot":           cfg.WorkRoot,
 		"ttlSeconds":         int(cfg.TTL.Seconds()),
@@ -672,7 +674,10 @@ func leaseToServerTarget(lease CoordinatorLease, cfg Config) (Server, SSHTarget,
 	}
 	server.PublicNet.IPv4.IP = lease.Host
 	server.ServerType.Name = lease.ServerType
-	target := SSHTarget{User: lease.SSHUser, Host: lease.Host, Key: cfg.SSHKey, Port: lease.SSHPort}
+	if lease.SSHFallbackPorts != nil {
+		cfg.SSHFallbackPorts = lease.SSHFallbackPorts
+	}
+	target := sshTargetForLease(cfg, lease.Host, lease.SSHUser, lease.SSHPort)
 	useStoredTestboxKey(&target, lease.ID)
 	return server, target, lease.ID
 }

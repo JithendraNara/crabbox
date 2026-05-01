@@ -12,35 +12,36 @@ import (
 )
 
 type Config struct {
-	Profile     string
-	Provider    string
-	Class       string
-	ServerType  string
-	Coordinator string
-	CoordToken  string
-	Location    string
-	Image       string
-	AWSRegion   string
-	AWSAMI      string
-	AWSSGID     string
-	AWSSubnetID string
-	AWSProfile  string
-	AWSRootGB   int32
-	AWSSSHCIDRs []string
-	SSHUser     string
-	SSHKey      string
-	SSHPort     string
-	ProviderKey string
-	WorkRoot    string
-	TTL         time.Duration
-	IdleTimeout time.Duration
-	Sync        SyncConfig
-	EnvAllow    []string
-	Capacity    CapacityConfig
-	Actions     ActionsConfig
-	Blacksmith  BlacksmithConfig
-	Results     ResultsConfig
-	Cache       CacheConfig
+	Profile          string
+	Provider         string
+	Class            string
+	ServerType       string
+	Coordinator      string
+	CoordToken       string
+	Location         string
+	Image            string
+	AWSRegion        string
+	AWSAMI           string
+	AWSSGID          string
+	AWSSubnetID      string
+	AWSProfile       string
+	AWSRootGB        int32
+	AWSSSHCIDRs      []string
+	SSHUser          string
+	SSHKey           string
+	SSHPort          string
+	SSHFallbackPorts []string
+	ProviderKey      string
+	WorkRoot         string
+	TTL              time.Duration
+	IdleTimeout      time.Duration
+	Sync             SyncConfig
+	EnvAllow         []string
+	Capacity         CapacityConfig
+	Actions          ActionsConfig
+	Blacksmith       BlacksmithConfig
+	Results          ResultsConfig
+	Cache            CacheConfig
 }
 
 type SyncConfig struct {
@@ -130,21 +131,22 @@ func baseConfig() Config {
 	class := "beast"
 	provider := "hetzner"
 	return Config{
-		Profile:     "default",
-		Provider:    provider,
-		Class:       class,
-		ServerType:  "",
-		Location:    "fsn1",
-		Image:       "ubuntu-24.04",
-		AWSRegion:   "eu-west-1",
-		AWSRootGB:   400,
-		SSHUser:     "crabbox",
-		SSHKey:      sshKey,
-		SSHPort:     "2222",
-		ProviderKey: "crabbox-steipete",
-		WorkRoot:    "/work/crabbox",
-		TTL:         90 * time.Minute,
-		IdleTimeout: 30 * time.Minute,
+		Profile:          "default",
+		Provider:         provider,
+		Class:            class,
+		ServerType:       "",
+		Location:         "fsn1",
+		Image:            "ubuntu-24.04",
+		AWSRegion:        "eu-west-1",
+		AWSRootGB:        400,
+		SSHUser:          "crabbox",
+		SSHKey:           sshKey,
+		SSHPort:          "2222",
+		SSHFallbackPorts: []string{"22"},
+		ProviderKey:      "crabbox-steipete",
+		WorkRoot:         "/work/crabbox",
+		TTL:              90 * time.Minute,
+		IdleTimeout:      30 * time.Minute,
 		Sync: SyncConfig{
 			Delete:      true,
 			Checksum:    false,
@@ -223,9 +225,10 @@ type fileAWSConfig struct {
 }
 
 type fileSSHConfig struct {
-	User string `yaml:"user,omitempty"`
-	Key  string `yaml:"key,omitempty"`
-	Port string `yaml:"port,omitempty"`
+	User          string    `yaml:"user,omitempty"`
+	Key           string    `yaml:"key,omitempty"`
+	Port          string    `yaml:"port,omitempty"`
+	FallbackPorts *[]string `yaml:"fallbackPorts,omitempty"`
 }
 
 type fileSyncConfig struct {
@@ -443,6 +446,9 @@ func applyFileConfig(cfg *Config, file fileConfig) {
 		if file.SSH.Port != "" {
 			cfg.SSHPort = file.SSH.Port
 		}
+		if file.SSH.FallbackPorts != nil {
+			cfg.SSHFallbackPorts = normalizeList(*file.SSH.FallbackPorts)
+		}
 	}
 	if file.WorkRoot != "" {
 		cfg.WorkRoot = file.WorkRoot
@@ -608,6 +614,9 @@ func applyEnv(cfg *Config) {
 	cfg.SSHUser = getenv("CRABBOX_SSH_USER", cfg.SSHUser)
 	cfg.SSHKey = getenv("CRABBOX_SSH_KEY", cfg.SSHKey)
 	cfg.SSHPort = getenv("CRABBOX_SSH_PORT", cfg.SSHPort)
+	if ports, ok := getenvList("CRABBOX_SSH_FALLBACK_PORTS"); ok {
+		cfg.SSHFallbackPorts = ports
+	}
 	cfg.ProviderKey = getenv("CRABBOX_HETZNER_SSH_KEY", cfg.ProviderKey)
 	cfg.WorkRoot = getenv("CRABBOX_WORK_ROOT", cfg.WorkRoot)
 	if ttl := os.Getenv("CRABBOX_TTL"); ttl != "" {
@@ -789,10 +798,25 @@ func getenvBool(name string) (bool, bool) {
 	}
 }
 
+func getenvList(name string) ([]string, bool) {
+	value, ok := os.LookupEnv(name)
+	if !ok {
+		return nil, false
+	}
+	if strings.EqualFold(strings.TrimSpace(value), "none") {
+		return []string{}, true
+	}
+	return splitCommaList(value), true
+}
+
 func splitCommaList(value string) []string {
 	parts := strings.Split(value, ",")
-	out := make([]string, 0, len(parts))
-	for _, part := range parts {
+	return normalizeList(parts)
+}
+
+func normalizeList(values []string) []string {
+	out := make([]string, 0, len(values))
+	for _, part := range values {
 		part = strings.TrimSpace(part)
 		if part != "" {
 			out = append(out, part)

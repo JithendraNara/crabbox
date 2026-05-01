@@ -747,7 +747,7 @@ func (a App) acquire(ctx context.Context, cfg Config, keep bool) (Server, SSHTar
 	if err != nil {
 		return Server{}, SSHTarget{}, "", err
 	}
-	target := SSHTarget{User: cfg.SSHUser, Host: server.PublicNet.IPv4.IP, Key: cfg.SSHKey, Port: cfg.SSHPort}
+	target := sshTargetFromConfig(cfg, server.PublicNet.IPv4.IP)
 	if err := waitForSSH(ctx, &target, a.Stderr); err != nil {
 		if !keep {
 			_ = deleteServer(context.Background(), cfg, server)
@@ -792,7 +792,7 @@ func (a App) acquireAWS(ctx context.Context, cfg Config, keep bool) (Server, SSH
 	if err != nil {
 		return Server{}, SSHTarget{}, "", err
 	}
-	target := SSHTarget{User: cfg.SSHUser, Host: server.PublicNet.IPv4.IP, Key: cfg.SSHKey, Port: cfg.SSHPort}
+	target := sshTargetFromConfig(cfg, server.PublicNet.IPv4.IP)
 	if err := waitForSSH(ctx, &target, a.Stderr); err != nil {
 		if !keep {
 			_ = client.DeleteServer(context.Background(), server.CloudID)
@@ -869,7 +869,7 @@ func (a App) findLease(ctx context.Context, cfg Config, id string) (Server, SSHT
 		if leaseID == "" {
 			leaseID = id
 		}
-		target := SSHTarget{User: cfg.SSHUser, Host: server.PublicNet.IPv4.IP, Key: cfg.SSHKey, Port: cfg.SSHPort}
+		target := sshTargetFromConfig(cfg, server.PublicNet.IPv4.IP)
 		useStoredTestboxKey(&target, leaseID)
 		return server, target, leaseID, nil
 	}
@@ -880,7 +880,7 @@ func (a App) findLease(ctx context.Context, cfg Config, id string) (Server, SSHT
 	if server, leaseID, err := findServerByAlias(servers, id); err != nil {
 		return Server{}, SSHTarget{}, "", err
 	} else if leaseID != "" {
-		target := SSHTarget{User: cfg.SSHUser, Host: server.PublicNet.IPv4.IP, Key: cfg.SSHKey, Port: cfg.SSHPort}
+		target := sshTargetFromConfig(cfg, server.PublicNet.IPv4.IP)
 		useStoredTestboxKey(&target, leaseID)
 		return server, target, leaseID, nil
 	}
@@ -901,7 +901,7 @@ func (a App) findAWSLease(ctx context.Context, cfg Config, id string) (Server, S
 		if leaseID == "" {
 			leaseID = id
 		}
-		target := SSHTarget{User: cfg.SSHUser, Host: server.PublicNet.IPv4.IP, Key: cfg.SSHKey, Port: cfg.SSHPort}
+		target := sshTargetFromConfig(cfg, server.PublicNet.IPv4.IP)
 		useStoredTestboxKey(&target, leaseID)
 		return server, target, leaseID, nil
 	}
@@ -912,7 +912,7 @@ func (a App) findAWSLease(ctx context.Context, cfg Config, id string) (Server, S
 	if server, leaseID, err := findServerByAlias(servers, id); err != nil {
 		return Server{}, SSHTarget{}, "", err
 	} else if leaseID != "" {
-		target := SSHTarget{User: cfg.SSHUser, Host: server.PublicNet.IPv4.IP, Key: cfg.SSHKey, Port: cfg.SSHPort}
+		target := sshTargetFromConfig(cfg, server.PublicNet.IPv4.IP)
 		useStoredTestboxKey(&target, leaseID)
 		return server, target, leaseID, nil
 	}

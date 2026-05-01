@@ -10,6 +10,7 @@
 - Added GitHub org membership enforcement before minting browser-login tokens.
 - Added the canonical coordinator endpoint configured for OAuth callback generation.
 - Added Blacksmith Testbox workflow flags for `crabbox warmup` and `crabbox run`, enabling one-command Testbox runs without repo YAML or environment variables.
+- Added configurable SSH fallback ports via `ssh.fallbackPorts` and `CRABBOX_SSH_FALLBACK_PORTS`.
 
 ### Changed
 
@@ -18,6 +19,7 @@
 - Scoped normal GitHub-login users to their own leases, run history, logs, and usage; shared-token admin auth remains required for pool and fleet-wide operator views.
 - AWS coordinator-created security groups now allow SSH only from configured CIDRs, the CLI-detected outbound IPv4 CIDR, or the request source IP instead of adding world-open SSH ingress.
 - Direct AWS security groups now honor the configured AWS SSH source CIDRs when creating managed SSH ingress.
+- Direct and brokered AWS now open the same configured SSH port candidates that the CLI will try.
 
 ### Fixed
 

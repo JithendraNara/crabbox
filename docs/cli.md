@@ -265,6 +265,9 @@ ssh:
   key: ~/.ssh/id_ed25519
   user: crabbox
   port: "2222"
+  # Ordered fallback ports tried after ssh.port; use [] to disable fallback.
+  fallbackPorts:
+    - "22"
 ```
 
 Open GitHub browser login:
@@ -355,6 +358,7 @@ CRABBOX_TTL
 CRABBOX_SSH_KEY
 CRABBOX_SSH_USER
 CRABBOX_SSH_PORT
+CRABBOX_SSH_FALLBACK_PORTS       comma-separated fallback ports, or none
 CRABBOX_WORK_ROOT
 CRABBOX_ACTIONS_WORKFLOW
 CRABBOX_ACTIONS_JOB

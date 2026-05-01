@@ -2,7 +2,12 @@ import { AwsClient } from "aws4fetch";
 import { XMLParser } from "fast-xml-parser";
 
 import { cloudInit } from "./bootstrap";
-import { awsInstanceTypeCandidatesForClass, validCIDRs, type LeaseConfig } from "./config";
+import {
+  awsInstanceTypeCandidatesForClass,
+  sshPorts,
+  validCIDRs,
+  type LeaseConfig,
+} from "./config";
 import { leaseProviderLabels } from "./provider-labels";
 import { leaseProviderName } from "./slug";
 import type { Env, ProviderMachine } from "./types";
@@ -309,7 +314,7 @@ export class EC2SpotClient {
       throw new Error("aws security group id is empty");
     }
     const cidrs = awsSSHCIDRs(config, this.env);
-    for (const port of uniquePorts(["22", config.sshPort])) {
+    for (const port of sshPorts(config)) {
       // oxlint-disable-next-line eslint/no-await-in-loop -- cleanup is per port.
       await this.revokeWorldTCP(groupID, port).catch((error: unknown) => {
         const message = error instanceof Error ? error.message : String(error);
@@ -484,10 +489,6 @@ function asString(value: unknown): string {
 
 function prependUnique(first: string, rest: string[]): string[] {
   return [first, ...rest.filter((value) => value !== first)];
-}
-
-function uniquePorts(ports: string[]): string[] {
-  return [...new Set(ports.filter(Boolean))];
 }
 
 function positiveInt(value: string | undefined): number {

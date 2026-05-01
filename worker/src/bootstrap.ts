@@ -1,6 +1,9 @@
-import type { LeaseConfig } from "./config";
+import { sshPorts, type LeaseConfig } from "./config";
 
 export function cloudInit(config: LeaseConfig): string {
+  const portLines = sshPorts(config)
+    .map((port) => `      Port ${port}`)
+    .join("\n");
   return `#cloud-config
 package_update: false
 package_upgrade: false
@@ -15,8 +18,7 @@ write_files:
   - path: /etc/ssh/sshd_config.d/99-crabbox-port.conf
     permissions: '0644'
     content: |
-      Port 22
-      Port ${config.sshPort}
+${portLines}
       PasswordAuthentication no
   - path: /usr/local/bin/crabbox-ready
     permissions: '0755'

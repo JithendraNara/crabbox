@@ -57,7 +57,7 @@ crabbox CLI    -- HTTPS --> Fleet Durable Object  -->   Hetzner / AWS Spot
 
 - **CLI** — Go binary. Loads config, mints a per-lease SSH key, asks the broker for a lease, waits for SSH, seeds remote Git, rsyncs the dirty checkout (with fingerprint skip when nothing changed), runs the command, streams output, releases.
 - **Broker** — Cloudflare Worker at `crabbox.openclaw.ai` plus a single Durable Object. Owns provider credentials, serializes lease state, enforces active-lease and monthly spend caps, and expires stale leases by alarm. Auth is GitHub login or a shared bearer token.
-- **Runner** — vanilla Ubuntu prepared by cloud-init with SSH on port 2222, Git, rsync, curl, jq, and `/work/crabbox`. No broker credentials live on the box. Project runtimes (Go, Node, Docker, services, secrets) come from your repo's GitHub Actions hydration, devcontainer, Nix, mise/asdf, or setup scripts — not from Crabbox.
+- **Runner** — vanilla Ubuntu prepared by cloud-init with SSH on the primary port, default `2222`, plus configured fallback ports, Git, rsync, curl, jq, and `/work/crabbox`. No broker credentials live on the box. Project runtimes (Go, Node, Docker, services, secrets) come from your repo's GitHub Actions hydration, devcontainer, Nix, mise/asdf, or setup scripts — not from Crabbox.
 
 A direct-provider mode (`--provider hetzner|aws` with local credentials) exists for debugging the broker itself; the brokered path is the default.
 
@@ -116,6 +116,9 @@ ssh:
   key: ~/.ssh/id_ed25519
   user: crabbox
   port: "2222"
+  # Ordered fallback ports tried after ssh.port; use [] to disable fallback.
+  fallbackPorts:
+    - "22"
 ```
 
 Optional Blacksmith Testbox wrapper:

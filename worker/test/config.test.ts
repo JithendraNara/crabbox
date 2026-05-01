@@ -6,6 +6,7 @@ import {
   serverTypeCandidatesForClass,
   serverTypeForClass,
   serverTypeForProviderClass,
+  sshPorts,
 } from "../src/config";
 
 describe("machine class config", () => {
@@ -51,6 +52,7 @@ describe("lease config", () => {
     expect(config.provider).toBe("hetzner");
     expect(config.profile).toBe("default");
     expect(config.sshPort).toBe("2222");
+    expect(config.sshFallbackPorts).toEqual(["22"]);
     expect(config.capacityMarket).toBe("spot");
     expect(config.capacityStrategy).toBe("most-available");
     expect(config.ttlSeconds).toBe(86_400);
@@ -60,5 +62,21 @@ describe("lease config", () => {
     const config = leaseConfig({ provider: "aws", sshPublicKey: "ssh-ed25519 test" });
     expect(config.serverType).toBe("c7a.48xlarge");
     expect(config.awsRegion).toBe("eu-west-1");
+  });
+
+  it("uses configured SSH fallback ports as ordered candidates", () => {
+    const config = leaseConfig({
+      sshPublicKey: "ssh-ed25519 test",
+      sshPort: "2222",
+      sshFallbackPorts: ["2022", "22", "2222", "bad"],
+    });
+    expect(config.sshFallbackPorts).toEqual(["2022", "22", "2222"]);
+    expect(sshPorts(config)).toEqual(["2222", "2022", "22"]);
+  });
+
+  it("allows disabling SSH fallback ports", () => {
+    const config = leaseConfig({ sshPublicKey: "ssh-ed25519 test", sshFallbackPorts: [] });
+    expect(config.sshFallbackPorts).toEqual([]);
+    expect(sshPorts(config)).toEqual(["2222"]);
   });
 });

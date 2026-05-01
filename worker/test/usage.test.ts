@@ -94,6 +94,7 @@ function testLease(overrides: Partial<LeaseRecord>): LeaseRecord {
     host: "203.0.113.10",
     sshUser: "crabbox",
     sshPort: "2222",
+    sshFallbackPorts: ["22"],
     workRoot: "/work/crabbox",
     keep: false,
     ttlSeconds: 5400,
