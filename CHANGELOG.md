@@ -13,6 +13,8 @@ Initial Crabbox release.
 - Direct-provider fallback mode for Hetzner and AWS debugging.
 - Commands: `init`, `doctor`, `warmup`, `run`, `status`, `list`, `ssh`, `inspect`, `stop`, `cleanup`, and `config`.
 - Usage command for estimated cost and runtime reporting by user, org, or fleet.
+- GitHub Actions bridge with `actions register`, `actions dispatch`, and `actions hydrate` for running project-owned workflow setup on leased boxes.
+- Hydrated workspace detection so `crabbox run --id <lease>` syncs local dirty work into the workflow's `$GITHUB_WORKSPACE`.
 - Orchestrator cost guardrails for active leases and monthly reserved spend.
 - Provider-backed pricing from AWS Spot price history and Hetzner server-type prices, with static fallback rates.
 - Compatibility aliases: `release`, `pool list`, and `machine cleanup`.
@@ -20,7 +22,7 @@ Initial Crabbox release.
 - Per-lease cloud SSH key/key-pair cleanup when machines are deleted.
 - Checksum rsync with delete semantics and a remote sanity guard for mass tracked deletions.
 - Shallow Git hydration for changed-test workflows.
-- Repo onboarding via `crabbox init`, generating `.crabbox.json`, `.github/workflows/crabbox.yml`, and `.agents/skills/crabbox/SKILL.md`.
+- Repo onboarding via `crabbox init`, generating `.crabbox.yaml`, `.github/workflows/crabbox.yml`, and `.agents/skills/crabbox/SKILL.md`.
 - Command docs under `docs/commands/` plus architecture, orchestrator, CLI, infrastructure, MVP, and security docs.
 - GoReleaser archive configuration for macOS, Linux, and Windows.
 
@@ -28,6 +30,7 @@ Initial Crabbox release.
 
 - Top-level help is now workflow-first, with common flows, grouped commands, config pointers, environment variables, and aliases.
 - `--idle-timeout` is documented as the preferred agent-facing name for lease TTL.
+- Repo config is YAML-only; pre-release JSON compatibility was removed before shipping.
 - `doctor` accepts per-lease SSH keys as the default posture and validates explicit `CRABBOX_SSH_KEY` only when set.
 - Coordinator requests bound dial/TLS timeouts and fall back to local `curl` on transport failures.
 - Local per-lease SSH keys move with coordinator-renamed lease IDs.
