@@ -1,10 +1,10 @@
 # Crabbox
 
-Crabbox is an open source remote testbox runner for maintainers and agents. It gives a Blacksmith Testboxes-style local loop on owned cloud capacity: provision or reuse a warm Linux box, sync the current dirty checkout, run a command remotely, stream output, and clean up.
+Crabbox is an open source remote testbox runner for maintainers and agents. It gives a fast local loop on owned cloud capacity: provision or reuse a warm Linux box, sync the current dirty checkout, run a command remotely, stream output, and clean up.
 
 The current implementation is a Go CLI plus a Cloudflare Worker/Durable Object coordinator. The CLI uses the coordinator for brokered Hetzner or AWS EC2 Spot leases, with direct provider calls kept as a debug fallback.
 
-Documentation lives in [`docs/`](docs/README.md). The GitHub Pages site is generated from those Markdown files with a small dependency-free builder:
+Documentation lives in [`docs/`](docs/README.md). Start with [How Crabbox Works](docs/how-it-works.md) for the end-to-end mental model. The GitHub Pages site is generated from those Markdown files with a small dependency-free builder:
 
 ```sh
 node scripts/build-docs-site.mjs
@@ -64,9 +64,9 @@ The GitHub Actions hydration lifecycle reuses the same machines, but lets the re
 1. `crabbox warmup --idle-timeout 90m` leases a reusable box.
 2. `crabbox actions hydrate --id cbx_...` registers that box as an ephemeral GitHub Actions runner, dispatches the configured workflow, and waits for the workflow to write a ready marker.
 3. The workflow runs normal Actions steps such as checkout, dependency install, cache/service setup, and secret-backed environment hydration.
-4. `crabbox run --id cbx_... -- <command>` syncs the local dirty checkout into the hydrated `$GITHUB_WORKSPACE` and runs commands there.
+4. `crabbox run --id cbx_... -- <command>` syncs the local dirty checkout into the hydrated `$GITHUB_WORKSPACE`, sources the workflow's non-secret env handoff, and runs commands there.
 
-Crabbox does not parse or reimplement GitHub Actions YAML. The project-owned workflow decides what to install and when the machine is ready.
+Crabbox does not parse or reimplement GitHub Actions YAML. The project-owned workflow decides what to install and when the machine is ready. GitHub secrets and OIDC request tokens remain workflow-step scoped unless that workflow intentionally persists its own short-lived handoff.
 
 Direct provider mode still exists for debugging. If no broker is configured, `--provider aws` uses the local AWS SDK credential chain and `--provider hetzner` uses `HCLOUD_TOKEN` or `HETZNER_TOKEN`. The brokered path is the default operational model.
 
@@ -284,7 +284,7 @@ Result:
 - End-to-end warm wall time was 93.66 seconds through the Cloudflare coordinator path.
 - The timing includes rsync scan, remote Git hydration, command execution, and output streaming.
 
-For true Blacksmith Testboxes parity, raise the Hetzner dedicated-core quota and re-run on `ccx63`.
+For the fastest dedicated-core verification, raise the Hetzner dedicated-core quota and re-run on `ccx63`.
 
 ## Configuration
 

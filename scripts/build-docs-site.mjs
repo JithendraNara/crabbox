@@ -7,10 +7,10 @@ const docsDir = path.join(root, "docs");
 const outDir = path.join(root, "dist", "docs-site");
 
 const sections = [
-  ["Start", ["README.md", "architecture.md", "orchestrator.md", "cli.md"]],
+  ["Start", ["README.md", "how-it-works.md", "architecture.md", "orchestrator.md", "cli.md"]],
   ["Features", rels("features")],
   ["Commands", rels("commands")],
-  ["Operate", ["infrastructure.md", "security.md", "mvp-plan.md"]],
+  ["Operate", ["operations.md", "observability.md", "troubleshooting.md", "performance.md", "infrastructure.md", "security.md", "mvp-plan.md"]],
 ];
 
 fs.rmSync(outDir, { recursive: true, force: true });

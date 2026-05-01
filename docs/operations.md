@@ -1,0 +1,130 @@
+# Operations
+
+Read when:
+
+- deploying or validating the coordinator;
+- changing Worker secrets, routes, or provider credentials;
+- checking cost limits or lease cleanup;
+- deciding whether a failure is local CLI, broker, provider, or runner state.
+
+Crabbox operations have three layers:
+
+```text
+local CLI -> Cloudflare Worker/Fleet Durable Object -> provider VM
+```
+
+The CLI owns local config, SSH keys, sync, and remote command execution. The coordinator owns auth, lease state, provider credentials, cost guardrails, and cleanup. Providers own VM creation, network reachability, and deletion.
+
+## Daily Health Check
+
+Run these before a release or after changing secrets:
+
+```sh
+go test ./...
+npm run check --prefix worker
+npm test --prefix worker
+node scripts/build-docs-site.mjs
+bin/crabbox doctor
+bin/crabbox status --json
+bin/crabbox usage --scope all --json
+```
+
+`crabbox doctor` checks local prerequisites and coordinator reachability. `crabbox status` confirms the broker can answer lease state. `crabbox usage` proves the usage endpoint and cost accounting path are reachable.
+
+## Deployment
+
+Worker source lives in `worker/`.
+
+```sh
+npm ci --prefix worker
+npm run format:check --prefix worker
+npm run lint --prefix worker
+npm run check --prefix worker
+npm test --prefix worker
+npm run build --prefix worker
+npx wrangler deploy --config worker/wrangler.jsonc
+```
+
+Required Worker secrets:
+
+```text
+CRABBOX_SHARED_TOKEN
+HETZNER_TOKEN
+AWS_ACCESS_KEY_ID
+AWS_SECRET_ACCESS_KEY
+```
+
+Cost-control secrets and settings:
+
+```text
+CRABBOX_COST_RATES_JSON
+CRABBOX_EUR_TO_USD
+CRABBOX_MAX_ACTIVE_LEASES
+CRABBOX_MAX_ACTIVE_LEASES_PER_OWNER
+CRABBOX_MAX_ACTIVE_LEASES_PER_ORG
+CRABBOX_MAX_MONTHLY_USD
+CRABBOX_MAX_MONTHLY_USD_PER_OWNER
+CRABBOX_MAX_MONTHLY_USD_PER_ORG
+CRABBOX_DEFAULT_ORG
+```
+
+## Routes And Access
+
+The canonical Worker URL is:
+
+```text
+https://crabbox-coordinator.steipete.workers.dev
+```
+
+The `crabbox.clawd.bot/*` route is attached and protected by Cloudflare Access. Bearer-token CLI automation talks to the Worker with `CRABBOX_SHARED_TOKEN`/`CRABBOX_COORDINATOR_TOKEN`.
+
+Use `crabbox config show` to confirm which URL and provider the CLI will use:
+
+```sh
+bin/crabbox config show
+```
+
+## Cleanup
+
+Brokered cleanup belongs to the Durable Object alarm. The CLI refuses provider cleanup when a coordinator is configured, because deleting machines behind the coordinator can remove live leases.
+
+Use:
+
+```sh
+bin/crabbox list
+bin/crabbox inspect --id cbx_... --json
+bin/crabbox stop cbx_...
+```
+
+Direct-provider cleanup is only for debug mode without a coordinator:
+
+```sh
+bin/crabbox cleanup --dry-run
+bin/crabbox cleanup
+```
+
+## Cost Guardrails
+
+The coordinator reserves worst-case lease cost before provisioning. If a request would exceed active-lease or monthly cost limits, it fails before creating a VM.
+
+Use:
+
+```sh
+bin/crabbox usage
+bin/crabbox usage --scope user --owner someone@example.com
+bin/crabbox usage --scope org --org openclaw
+bin/crabbox usage --scope all --json
+```
+
+Cost is an estimate for compute leases, not an invoice. See [Cost And Usage](features/cost-usage.md).
+
+## Release Checklist
+
+Before handing off:
+
+- `go test ./...`
+- Worker format, lint, typecheck, tests, and build.
+- `node scripts/build-docs-site.mjs`
+- docs link check.
+- `git diff --check`
+- live `crabbox doctor` if broker credentials are available.

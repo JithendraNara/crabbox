@@ -1,0 +1,102 @@
+# Observability
+
+Read when:
+
+- debugging a failed or slow run;
+- checking who used capacity this month;
+- finding a remote machine for SSH inspection;
+- correlating Actions hydration with the remote workspace.
+
+Crabbox currently exposes operational visibility through CLI commands, coordinator usage summaries, provider labels, GitHub Actions run links, and Worker logs. There is no central searchable log store yet; the reliable path is to combine the command output with the lease ID.
+
+## Lease State
+
+Use `status`, `list`, and `inspect`:
+
+```sh
+bin/crabbox status --id cbx_...
+bin/crabbox list --json
+bin/crabbox inspect --id cbx_... --json
+```
+
+Important fields:
+
+- lease ID;
+- owner and org;
+- provider and server type;
+- state;
+- expiry;
+- public address;
+- SSH user and port;
+- keep/delete behavior.
+
+Provider machines are labeled with Crabbox metadata so cloud consoles can be correlated back to the lease.
+
+## Usage And Cost
+
+Use `usage` for monthly summaries:
+
+```sh
+bin/crabbox usage
+bin/crabbox usage --scope user --owner steipete@gmail.com
+bin/crabbox usage --scope org --org openclaw
+bin/crabbox usage --scope all --json
+```
+
+Reports include lease count, active lease count, elapsed runtime, estimated elapsed cost, reserved worst-case cost, and breakdowns by owner, org, provider, and server type.
+
+## Remote Debugging
+
+Use SSH for live process and filesystem inspection:
+
+```sh
+bin/crabbox ssh --id cbx_...
+bin/crabbox inspect --id cbx_... --json
+```
+
+Useful remote checks:
+
+```sh
+test -f /var/lib/crabbox-ready
+systemctl status docker --no-pager
+df -h
+free -h
+ps aux --sort=-%cpu | head
+```
+
+If a lease was created with `--keep`, SSH remains available until `crabbox stop` or TTL cleanup removes it.
+
+## Actions Hydration
+
+`crabbox actions hydrate` dispatches the configured workflow and waits for a ready marker. The workflow run URL and marker path are the key correlation points.
+
+Use:
+
+```sh
+bin/crabbox actions hydrate --id cbx_...
+bin/crabbox inspect --id cbx_... --json
+```
+
+The hydrated run writes non-secret handoff data for later `crabbox run --id cbx_...` commands. Secrets and OIDC tokens remain workflow-step scoped unless the workflow intentionally writes its own short-lived handoff.
+
+## Worker Logs
+
+When the coordinator path fails before SSH, check Worker logs and Durable Object errors. The symptoms usually group into:
+
+- auth failure;
+- cost limit rejection;
+- provider quota or capacity rejection;
+- provider API failure;
+- Durable Object alarm or state transition bug.
+
+Keep the lease ID, owner, org, provider, class, and request time when comparing CLI output to Worker logs.
+
+## Gaps
+
+Current Crabbox observability is enough for maintainer operations, but not yet a full analytics product. Missing pieces:
+
+- persisted per-step timing;
+- searchable historical run logs;
+- structured test-result ingestion;
+- alerting on budget or failure-rate thresholds;
+- dashboard UI.

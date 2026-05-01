@@ -2,7 +2,7 @@
 
 ## Goal
 
-Build Crabbox as a Go CLI plus Cloudflare coordinator that lets trusted OpenClaw maintainers run local worktrees on shared remote machines with the same core feel as Blacksmith Testboxes:
+Build Crabbox as a Go CLI plus Cloudflare coordinator that lets trusted OpenClaw maintainers run local worktrees on shared remote machines with a fast local-agent loop:
 
 1. Ask for a machine class.
 2. Get an idle warm machine or provision a new Hetzner machine.
@@ -36,22 +36,22 @@ Expected user experience:
 - Local env allowlist only.
 - Shared pool for trusted maintainers.
 - Warm machines for fast repeated checks.
-- `warmup` is first-class, because the Blacksmith Testbox value comes from hydrating a box before the agent needs test feedback.
+- `warmup` is first-class, because hydrated boxes shorten the agent feedback loop.
 - One-shot `run --profile ...` is convenience sugar over acquire, sync, run, and release.
 - TTL cleanup for abandoned leases.
 - Explicit `stop`/`release` for manual cleanup.
 
 ## Product Boundary
 
-Crabbox MVP is an OpenClaw-specific replacement for the useful local-agent loop of Blacksmith Testboxes, not a drop-in replacement for all Blacksmith runner behavior.
+Crabbox MVP is an OpenClaw-specific remote testbox loop, not a drop-in replacement for every hosted runner behavior.
 
-Blacksmith Testboxes run commands inside a real GitHub Actions job, including GitHub Actions secrets, OIDC tokens, service containers, and their runner image. Crabbox MVP instead runs commands over SSH on owned Hetzner capacity. This is acceptable for trusted OpenClaw maintainers, but it means the MVP must be explicit about:
+Crabbox MVP runs commands over SSH on owned cloud capacity. Actions-backed hydration can run project setup inside a real GitHub Actions job, but direct SSH runs must be explicit about:
 
 - secrets being forwarded from local env only by allowlist;
 - no GitHub Actions OIDC or repository secret access in MVP;
 - no untrusted multi-tenant execution;
 - weaker isolation until per-lease users or disposable machines are implemented;
-- caching being local warm-machine state rather than Blacksmith colocated cache or sticky disks.
+- caching being local warm-machine state rather than a central cache service.
 
 ## Repositories
 
@@ -165,7 +165,7 @@ And proves:
 - No full autoscaling scheduler.
 - No multi-tenant untrusted execution.
 - No Windows/macOS workers.
-- No Blacksmith backend in the first implementation path.
+- No hosted-runner adapter in the first implementation path.
 - No attempt to perfectly hide SSH; make it reliable first.
 
 ## Known Current Infra Facts
@@ -201,4 +201,4 @@ And proves:
 4. Add heartbeat support for long-running commands.
 5. Add one-shot `run --profile` cleanup semantics coverage in integration tests.
 6. Add coordinator admin cleanup/drain endpoints.
-7. Re-run OpenClaw `pnpm test:changed:max` on `ccx63` and compare against Blacksmith Testboxes.
+7. Re-run OpenClaw `pnpm test:changed:max` on `ccx63` and compare against the current Crabbox baseline.

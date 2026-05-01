@@ -97,8 +97,8 @@ Owned backends:
 
 Brokered backends, later:
 
-- `blacksmith`: wrap Blacksmith as a brokered backend, not owned capacity.
-- `runson` or GitHub runner-based systems if needed.
+- `github-actions`: register or dispatch real Actions-backed runner work when workflow parity is required.
+- `external-runner`: adapter boundary for other hosted runner systems if needed.
 
 The MVP implements `hetzner-ephemeral` and `aws-spot`, and leaves interfaces ready for `hetzner-static`.
 

@@ -94,8 +94,8 @@ The coordinator exposes `GET /v1/usage`. `crabbox usage` can show a single user,
 
 Usage reports include lease count, active lease count, elapsed runtime, estimated elapsed cost, reserved worst-case cost, and breakdowns by owner, org, provider, and server type.
 
-## Blacksmith Parity Boundary
+## Actions Parity Boundary
 
-Blacksmith Testboxes run inside a real GitHub Actions job with Actions secrets, OIDC, and service containers. Crabbox should use the same boundary for Actions-backed lanes: dispatch or host a real GitHub Actions job and attach to the hydrated runner, not parse workflow YAML into a local pseudo-runner.
+Actions-backed lanes should run inside a real GitHub Actions job when they need Actions secrets, OIDC, service containers, or repository workflow setup. Crabbox should dispatch or host a real GitHub Actions job and attach to the hydrated runner, not parse workflow YAML into a local pseudo-runner.
 
 The current bridge is `crabbox init`: generate repo-local workflow and agent instructions so warmup can hydrate the same dependencies the real CI uses. The Actions-backed backend should register ephemeral self-hosted runners or dispatch a configured workflow for full secrets/OIDC parity.
