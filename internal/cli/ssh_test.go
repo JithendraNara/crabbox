@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -117,6 +118,101 @@ func TestSSHPortCandidatesPreferConfiguredPortWithFallback(t *testing.T) {
 	}
 }
 
+func TestRemotePruneSyncManifestDeletesOnlyManagedPaths(t *testing.T) {
+	got := remotePruneSyncManifest("/work/repo")
+	for _, want := range []string{
+		"sync-deleted.new",
+		"manifest_removed_paths",
+		"python3 -",
+		"rm -f --",
+		"rmdir --",
+		".crabbox/sync-manifest.new",
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("remotePruneSyncManifest missing %q in %q", want, got)
+		}
+	}
+}
+
+func TestRemotePruneSyncManifestUsesDeletedListBeforeOldManifestDiff(t *testing.T) {
+	got := remotePruneSyncManifest("/work/repo")
+	deletedIndex := strings.Index(got, `delete_paths < "$deleted"`)
+	oldIndex := strings.Index(got, "manifest_removed_paths | delete_paths")
+	if deletedIndex < 0 || oldIndex < 0 || deletedIndex > oldIndex {
+		t.Fatalf("deleted list should be applied before old manifest diff: %q", got)
+	}
+}
+
+func TestRemotePruneSyncManifestPrunesManagedFiles(t *testing.T) {
+	workdir := t.TempDir()
+	mustWriteTestFile(t, filepath.Join(workdir, ".crabbox", "sync-manifest"), "keep.txt\x00kept-dir/keep.txt\x00stale.txt\x00old-empty/remove.txt\x00non-empty/remove.txt\x00")
+	mustWriteTestFile(t, filepath.Join(workdir, ".crabbox", "sync-manifest.new"), "keep.txt\x00kept-dir/keep.txt\x00")
+	mustWriteTestFile(t, filepath.Join(workdir, ".crabbox", "sync-deleted.new"), "explicit-delete.txt\x00../outside.txt\x00/absolute.txt\x00")
+	for _, rel := range []string{
+		"keep.txt",
+		"kept-dir/keep.txt",
+		"stale.txt",
+		"old-empty/remove.txt",
+		"non-empty/remove.txt",
+		"non-empty/unmanaged.txt",
+		"explicit-delete.txt",
+		"unmanaged.txt",
+	} {
+		mustWriteTestFile(t, filepath.Join(workdir, filepath.FromSlash(rel)), rel)
+	}
+	outside := filepath.Join(filepath.Dir(workdir), "outside.txt")
+	mustWriteTestFile(t, outside, "outside")
+
+	cmd := exec.Command("bash", "-lc", remotePruneSyncManifest(workdir))
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("remote prune failed: %v\n%s", err, out)
+	}
+
+	for _, rel := range []string{"keep.txt", "kept-dir/keep.txt", "non-empty/unmanaged.txt", "unmanaged.txt"} {
+		if _, err := os.Stat(filepath.Join(workdir, filepath.FromSlash(rel))); err != nil {
+			t.Fatalf("%s should survive prune: %v", rel, err)
+		}
+	}
+	for _, rel := range []string{"stale.txt", "old-empty/remove.txt", "non-empty/remove.txt", "explicit-delete.txt"} {
+		if _, err := os.Stat(filepath.Join(workdir, filepath.FromSlash(rel))); !os.IsNotExist(err) {
+			t.Fatalf("%s should be pruned, stat err=%v", rel, err)
+		}
+	}
+	if _, err := os.Stat(filepath.Join(workdir, "old-empty")); !os.IsNotExist(err) {
+		t.Fatalf("empty parent dir should be pruned, stat err=%v", err)
+	}
+	if _, err := os.Stat(filepath.Join(workdir, "non-empty")); err != nil {
+		t.Fatalf("non-empty parent dir should survive: %v", err)
+	}
+	if _, err := os.Stat(outside); err != nil {
+		t.Fatalf("unsafe deleted path should not escape workdir: %v", err)
+	}
+}
+
+func TestRemoteApplySyncManifestOnlyCommitsManifest(t *testing.T) {
+	got := remoteApplySyncManifest("/work/repo")
+	if strings.Contains(got, "manifest_removed_paths") || strings.Contains(got, "delete_paths") {
+		t.Fatalf("remoteApplySyncManifest should not delete after rsync: %q", got)
+	}
+	if !strings.Contains(got, "mv \"$new\" .crabbox/sync-manifest") {
+		t.Fatalf("remoteApplySyncManifest should commit new manifest: %q", got)
+	}
+}
+
+func TestRemoteWriteSyncManifestNew(t *testing.T) {
+	got := remoteWriteSyncManifestNew("/work/repo")
+	if !strings.Contains(got, "cat > '/work/repo/.crabbox/sync-manifest.new'") {
+		t.Fatalf("unexpected manifest write command: %q", got)
+	}
+}
+
+func TestRemoteWriteSyncDeletedNew(t *testing.T) {
+	got := remoteWriteSyncDeletedNew("/work/repo")
+	if !strings.Contains(got, "cat > '/work/repo/.crabbox/sync-deleted.new'") {
+		t.Fatalf("unexpected deleted manifest write command: %q", got)
+	}
+}
+
 func TestIsBootstrapWaitError(t *testing.T) {
 	if !isBootstrapWaitError(exit(5, "timed out waiting for SSH on 203.0.113.10 during bootstrap")) {
 		t.Fatal("expected SSH timeout to be retryable")
@@ -168,6 +264,16 @@ func TestMoveStoredTestboxKeyHandlesCoordinatorRenamedLease(t *testing.T) {
 	}
 	if _, err := os.Stat(oldPath); !os.IsNotExist(err) {
 		t.Fatalf("old key still exists or unexpected stat error: %v", err)
+	}
+}
+
+func mustWriteTestFile(t *testing.T, path, value string) {
+	t.Helper()
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte(value), 0o644); err != nil {
+		t.Fatal(err)
 	}
 }
 

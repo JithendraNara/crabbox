@@ -20,14 +20,23 @@ bin/crabbox run --id cbx_... -- pnpm test:changed:max
 
 Warm leases avoid waiting for a fresh VM and preserve package caches outside the synced source tree. Use `crabbox stop cbx_...` when the loop is done.
 
-## Sync Fingerprints
+## Sync Size
 
-The CLI records a local/remote fingerprint after sync. If nothing changed, hot runs skip the expensive rsync pass.
+The CLI syncs a Git-derived manifest: tracked files plus nonignored untracked files. Ignored build output, dependency folders, `.git`, and common local caches are excluded before rsync sees the tree. Each run prints the candidate file count and byte estimate, then warns or fails if the manifest crosses configured guardrails.
 
 Good habits:
 
 - keep generated artifacts and dependency folders out of the synced tree;
 - tune repo-local excludes in `.crabbox.yaml`;
+- keep `.gitignore` current so local build junk never enters the manifest;
+- raise `sync.failFiles` or `sync.failBytes` only for projects that intentionally sync very large source trees.
+
+## Sync Fingerprints
+
+The CLI records a local/remote fingerprint after sync. If nothing changed, hot runs skip the expensive rsync pass. The fingerprint includes the commit, dirty metadata, sync config, and manifest, so adding a nonignored untracked file invalidates the skip while ignored cache churn does not.
+
+Good habits:
+
 - avoid broad local deletes unless they are intentional;
 - use `inspect` when diagnosing stale remote state.
 

@@ -31,6 +31,12 @@ sync:
   checksum: false
   gitSeed: true
   fingerprint: true
+  timeout: 15m
+  warnFiles: 50000
+  warnBytes: 5368709120
+  failFiles: 150000
+  failBytes: 21474836480
+  allowLarge: false
   exclude:
     - node_modules
     - dist

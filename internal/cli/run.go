@@ -92,6 +92,7 @@ func (a App) runCommand(ctx context.Context, args []string) error {
 	debugSync := fs.Bool("debug", false, "print detailed sync timing")
 	shellMode := fs.Bool("shell", false, "run command through the remote shell")
 	checksumSync := fs.Bool("checksum", false, "use checksum rsync instead of size/time")
+	forceSyncLarge := fs.Bool("force-sync-large", false, "allow unusually large sync candidates")
 	junitResults := fs.String("junit", "", "comma-separated remote JUnit XML paths to record")
 	if err := parseFlags(fs, args); err != nil {
 		return err
@@ -204,9 +205,16 @@ func (a App) runCommand(ctx context.Context, args []string) error {
 		if err := runSSHQuiet(ctx, target, remoteMkdir(workdir)); err != nil {
 			return exit(7, "create remote workdir: %v", err)
 		}
+		manifest, err := syncManifest(repo.Root, configuredExcludes(cfg))
+		if err != nil {
+			return exit(6, "build sync file list: %v", err)
+		}
+		if err := checkSyncPreflight(manifest, cfg, *forceSyncLarge, a.Stderr); err != nil {
+			return err
+		}
 		fingerprint := ""
 		if cfg.Sync.Fingerprint {
-			fingerprint, err = syncFingerprint(repo, cfg)
+			fingerprint, err = syncFingerprintForManifest(repo, cfg, manifest)
 			if err != nil {
 				fmt.Fprintf(a.Stderr, "warning: sync fingerprint failed: %v\n", err)
 			} else if fingerprint != "" {
@@ -223,8 +231,23 @@ func (a App) runCommand(ctx context.Context, args []string) error {
 				fmt.Fprintf(a.Stderr, "warning: remote git seed failed: %v\n", err)
 			}
 		}
-		if err := rsync(ctx, target, repo.Root, workdir, configuredExcludes(cfg), a.Stdout, a.Stderr, rsyncOptions{Debug: *debugSync, Delete: cfg.Sync.Delete, Checksum: cfg.Sync.Checksum}); err != nil {
+		manifestData := manifest.NUL()
+		if err := runSSHInputQuiet(ctx, target, remoteWriteSyncManifestNew(workdir), string(manifestData)); err != nil {
+			return exit(7, "write sync manifest: %v", err)
+		}
+		if err := runSSHInputQuiet(ctx, target, remoteWriteSyncDeletedNew(workdir), string(manifest.DeletedNUL())); err != nil {
+			return exit(7, "write sync delete manifest: %v", err)
+		}
+		if cfg.Sync.Delete {
+			if err := runSSHQuiet(ctx, target, remotePruneSyncManifest(workdir)); err != nil {
+				return exit(6, "remote sync prune failed: %v", err)
+			}
+		}
+		if err := rsync(ctx, target, repo.Root, workdir, configuredExcludes(cfg), a.Stdout, a.Stderr, rsyncOptions{Debug: *debugSync, Delete: cfg.Sync.Delete, Checksum: cfg.Sync.Checksum, UseFilesFrom: true, FilesFrom: manifestData, Timeout: cfg.Sync.Timeout, HeartbeatInterval: 15 * time.Second}); err != nil {
 			return exit(6, "rsync failed: %v", err)
+		}
+		if err := runSSHQuiet(ctx, target, remoteApplySyncManifest(workdir)); err != nil {
+			return exit(6, "remote sync manifest apply failed: %v", err)
 		}
 		if err := runSSHQuiet(ctx, target, remoteSyncSanity(workdir, os.Getenv("CRABBOX_ALLOW_MASS_DELETIONS") == "1")); err != nil {
 			return exit(6, "remote sync sanity failed: %v", err)

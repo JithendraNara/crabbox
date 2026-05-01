@@ -29,6 +29,12 @@ sync:
   checksum: true
   gitSeed: false
   baseRef: trunk
+  timeout: 30m
+  warnFiles: 100
+  warnBytes: 200
+  failFiles: 300
+  failBytes: 400
+  allowLarge: true
   exclude:
     - .artifacts
     - tmp
@@ -90,6 +96,9 @@ ssh:
 	}
 	if !cfg.Sync.Checksum || cfg.Sync.GitSeed || cfg.Sync.BaseRef != "trunk" {
 		t.Fatalf("sync config not loaded: %#v", cfg.Sync)
+	}
+	if cfg.Sync.Timeout.String() != "30m0s" || cfg.Sync.WarnFiles != 100 || cfg.Sync.WarnBytes != 200 || cfg.Sync.FailFiles != 300 || cfg.Sync.FailBytes != 400 || !cfg.Sync.AllowLarge {
+		t.Fatalf("sync guardrails not loaded: %#v", cfg.Sync)
 	}
 	if len(cfg.Sync.Excludes) != 2 || cfg.Sync.Excludes[0] != ".artifacts" || cfg.Sync.Excludes[1] != "tmp" {
 		t.Fatalf("sync excludes not loaded: %#v", cfg.Sync.Excludes)

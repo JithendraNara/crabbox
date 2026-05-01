@@ -35,7 +35,7 @@ developer laptop
 leased runner
 ```
 
-The **CLI** is the user-facing tool. It loads config from `~/.config/crabbox/config.yaml`, repo-local `crabbox.yaml` or `.crabbox.yaml`, creates a per-lease SSH key, asks the broker for a lease, waits for SSH, seeds remote Git when possible, skips sync when the local/remote fingerprint matches, rsyncs the current checkout, runs the requested command, streams output, and releases the lease unless `--keep` is set. SSH prefers the configured port and can fall back to port 22 during bootstrap.
+The **CLI** is the user-facing tool. It loads config from `~/.config/crabbox/config.yaml`, repo-local `crabbox.yaml` or `.crabbox.yaml`, creates a per-lease SSH key, asks the broker for a lease, waits for SSH, seeds remote Git when possible, builds a Git file-list sync manifest, skips sync when the local/remote fingerprint matches, rsyncs the current checkout, runs the requested command, streams output, and releases the lease unless `--keep` is set. SSH prefers the configured port and can fall back to port 22 during bootstrap.
 
 The **broker** is the Cloudflare Worker at `crabbox-coordinator.steipete.workers.dev`. It authenticates requests with `CRABBOX_SHARED_TOKEN`, routes all fleet operations through a single Durable Object, and owns cloud-provider credentials. Local machines do not need AWS or Hetzner API keys for the normal path.
 
@@ -54,8 +54,8 @@ The normal lifecycle is:
 2. CLI sends `POST /v1/leases` with provider, class, TTL, SSH public key, and bootstrap options.
 3. Worker creates a Hetzner server or AWS Spot instance and stores the lease.
 4. CLI waits for `crabbox-ready` over SSH.
-5. CLI seeds remote Git when possible, then rsyncs the dirty local checkout into `/work/crabbox/<lease>/<repo>`.
-6. CLI records sync fingerprints, runs sync sanity checks, and hydrates configured base-ref history.
+5. CLI seeds remote Git when possible, then rsyncs tracked plus nonignored untracked files into `/work/crabbox/<lease>/<repo>`.
+6. CLI records sync fingerprints, enforces sync size/time guardrails, runs sync sanity checks, and hydrates configured base-ref history.
 7. CLI runs the command over SSH and returns the remote exit code.
 8. CLI releases the lease; the broker terminates the machine unless it was kept.
 
@@ -102,7 +102,7 @@ Working today:
 - [Hetzner server provisioning with class fallback](docs/features/providers.md)
 - [AWS EC2 Spot provisioning with class fallback](docs/features/providers.md)
 - [cloud-init bootstrap for Node 24, pnpm, Docker, Git, and rsync, with apt/corepack retries](docs/features/runner-bootstrap.md)
-- [Git-seeded rsync overlay of local dirty worktrees](docs/features/sync.md)
+- [Git file-list rsync overlay of tracked and nonignored local files](docs/features/sync.md)
 - [sync fingerprint skip for no-change hot runs](docs/features/sync.md)
 - [per-lease SSH keys under the Crabbox config directory](docs/features/ssh-keys.md)
 - [coordinator cost guardrails and monthly usage summaries](docs/features/cost-usage.md)
@@ -355,6 +355,10 @@ CRABBOX_SYNC_DELETE              opt into/out of rsync --delete
 CRABBOX_SYNC_GIT_SEED            opt into/out of remote Git seeding
 CRABBOX_SYNC_FINGERPRINT         opt into/out of no-op sync skipping
 CRABBOX_SYNC_BASE_REF            default base ref to hydrate
+CRABBOX_SYNC_TIMEOUT             default 15m
+CRABBOX_SYNC_WARN_FILES/BYTES    large-sync warning thresholds
+CRABBOX_SYNC_FAIL_FILES/BYTES    large-sync failure thresholds
+CRABBOX_SYNC_ALLOW_LARGE         bypass large-sync failure thresholds
 CRABBOX_RESULTS_JUNIT            comma-separated remote JUnit XML paths
 CRABBOX_CACHE_PNPM/NPM/DOCKER/GIT opt into/out of cache kinds
 CRABBOX_CACHE_MAX_GB             cache policy size hint

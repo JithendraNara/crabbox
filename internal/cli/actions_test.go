@@ -46,6 +46,45 @@ func TestActionsHydrateFieldsOmitsEmptyJobForOldWorkflows(t *testing.T) {
 	}
 }
 
+func TestFilterWorkflowInputsDropsUndeclaredOptionalInputs(t *testing.T) {
+	fields := actionsHydrateFields("cbx_123", "crabbox-cbx-123", "hydrate", 90, []string{"custom=value"})
+	filtered, dropped := filterWorkflowInputs(fields, map[string]bool{
+		"crabbox_id":                 true,
+		"crabbox_runner_label":       true,
+		"crabbox_keep_alive_minutes": true,
+	})
+	joined := strings.Join(filtered, "\n")
+	if strings.Contains(joined, "crabbox_job=") || strings.Contains(joined, "custom=value") {
+		t.Fatalf("unexpected undeclared fields kept: %q", joined)
+	}
+	if len(dropped) != 2 || !workflowFieldsContain(dropped, "crabbox_job") {
+		t.Fatalf("unexpected dropped fields: %v", dropped)
+	}
+}
+
+func TestParseWorkflowDispatchInputs(t *testing.T) {
+	inputs, ok, err := parseWorkflowDispatchInputs([]byte(`name: Crabbox
+on:
+  workflow_dispatch:
+    inputs:
+      crabbox_id:
+        required: true
+      crabbox_runner_label:
+        required: true
+      crabbox_keep_alive_minutes:
+        required: false
+`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !ok || !inputs["crabbox_id"] || !inputs["crabbox_runner_label"] || !inputs["crabbox_keep_alive_minutes"] {
+		t.Fatalf("unexpected inputs ok=%t inputs=%v", ok, inputs)
+	}
+	if inputs["crabbox_job"] {
+		t.Fatal("unexpected crabbox_job input")
+	}
+}
+
 func TestGitHubActionsRunnerLabels(t *testing.T) {
 	cfg := baseConfig()
 	cfg.Profile = "Project Check"

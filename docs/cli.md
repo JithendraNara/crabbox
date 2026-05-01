@@ -33,7 +33,7 @@ crabbox config show [--json]
 crabbox config path
 crabbox config set-broker --url <url> --token-stdin [--provider hetzner|aws]
 crabbox warmup [--provider hetzner|aws] [--profile <name>] [--idle-timeout <duration>]
-crabbox run [--id <lease-id>] [--shell] [--checksum] [--debug] -- <command...>
+crabbox run [--id <lease-id>] [--shell] [--checksum] [--debug] [--force-sync-large] -- <command...>
 crabbox history [--lease <lease-id>] [--owner <email>] [--org <name>] [--limit <n>] [--json]
 crabbox logs <run-id> [--json]
 crabbox results <run-id> [--json]
@@ -177,6 +177,7 @@ Flags:
 --idle-timeout <duration>
 --no-sync               run without syncing
 --sync-only             sync and exit
+--force-sync-large      allow a sync candidate above configured fail thresholds
 --keep                  keep lease after command exits
 --shell                 run the command string through bash -lc
 --checksum              use checksum rsync instead of size/time
@@ -262,6 +263,12 @@ sync:
   gitSeed: true
   fingerprint: true
   baseRef: main
+  timeout: 15m
+  warnFiles: 50000
+  warnBytes: 5368709120
+  failFiles: 150000
+  failBytes: 21474836480
+  allowLarge: false
   exclude:
     - node_modules
     - .turbo
@@ -293,6 +300,12 @@ CRABBOX_PROFILE
 CRABBOX_CONFIG
 CRABBOX_SSH_KEY
 CRABBOX_RESULTS_JUNIT
+CRABBOX_SYNC_TIMEOUT
+CRABBOX_SYNC_WARN_FILES
+CRABBOX_SYNC_WARN_BYTES
+CRABBOX_SYNC_FAIL_FILES
+CRABBOX_SYNC_FAIL_BYTES
+CRABBOX_SYNC_ALLOW_LARGE
 CRABBOX_CACHE_PNPM/NPM/DOCKER/GIT
 CRABBOX_CACHE_MAX_GB
 CRABBOX_CACHE_PURGE_ON_RELEASE

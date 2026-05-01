@@ -58,6 +58,12 @@ func (a App) configShow(args []string) error {
 			"gitSeed":     cfg.Sync.GitSeed,
 			"fingerprint": cfg.Sync.Fingerprint,
 			"baseRef":     cfg.Sync.BaseRef,
+			"timeout":     cfg.Sync.Timeout.String(),
+			"warnFiles":   cfg.Sync.WarnFiles,
+			"warnBytes":   cfg.Sync.WarnBytes,
+			"failFiles":   cfg.Sync.FailFiles,
+			"failBytes":   cfg.Sync.FailBytes,
+			"allowLarge":  cfg.Sync.AllowLarge,
 		},
 		"env": map[string]any{
 			"allow": cfg.EnvAllow,
@@ -110,7 +116,7 @@ func (a App) configShow(args []string) error {
 	fmt.Fprintf(a.Stdout, "provider=%s class=%s type=%s profile=%s\n", cfg.Provider, cfg.Class, cfg.ServerType, cfg.Profile)
 	fmt.Fprintf(a.Stdout, "broker=%s auth=%s\n", blank(cfg.Coordinator, "-"), tokenState(cfg.CoordToken))
 	fmt.Fprintf(a.Stdout, "ssh=%s@<host>:%s key=%s\n", cfg.SSHUser, cfg.SSHPort, cfg.SSHKey)
-	fmt.Fprintf(a.Stdout, "sync delete=%t checksum=%t git_seed=%t fingerprint=%t base_ref=%s excludes=%d\n", cfg.Sync.Delete, cfg.Sync.Checksum, cfg.Sync.GitSeed, cfg.Sync.Fingerprint, blank(cfg.Sync.BaseRef, "-"), len(configuredExcludes(cfg)))
+	fmt.Fprintf(a.Stdout, "sync delete=%t checksum=%t git_seed=%t fingerprint=%t base_ref=%s excludes=%d timeout=%s\n", cfg.Sync.Delete, cfg.Sync.Checksum, cfg.Sync.GitSeed, cfg.Sync.Fingerprint, blank(cfg.Sync.BaseRef, "-"), len(configuredExcludes(cfg)), cfg.Sync.Timeout)
 	fmt.Fprintf(a.Stdout, "env allow=%s\n", strings.Join(cfg.EnvAllow, ","))
 	fmt.Fprintf(a.Stdout, "capacity market=%s strategy=%s fallback=%s regions=%s\n", cfg.Capacity.Market, cfg.Capacity.Strategy, cfg.Capacity.Fallback, blank(strings.Join(cfg.Capacity.Regions, ","), "-"))
 	fmt.Fprintf(a.Stdout, "actions repo=%s workflow=%s job=%s ref=%s runner_version=%s ephemeral=%t labels=%s\n", blank(cfg.Actions.Repo, "-"), blank(cfg.Actions.Workflow, "-"), blank(cfg.Actions.Job, "-"), blank(cfg.Actions.Ref, "-"), cfg.Actions.RunnerVersion, cfg.Actions.Ephemeral, blank(strings.Join(cfg.Actions.RunnerLabels, ","), "-"))

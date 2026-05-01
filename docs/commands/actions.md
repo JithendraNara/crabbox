@@ -2,11 +2,13 @@
 
 `crabbox actions` bridges a leased Crabbox machine into real GitHub Actions.
 
-It does not parse workflow YAML locally. It uses GitHub's runner and workflow APIs:
+It uses GitHub's runner and workflow APIs:
 
 - `actions register` gets a repository runner registration token through `gh api`, installs the official `actions/runner` package on an existing box, and starts it with systemd.
 - `actions hydrate` registers the runner, dispatches the configured workflow with the lease label, waits for the workflow to write the hydrated workspace marker, and then returns.
 - `actions dispatch` calls `gh workflow run` for the configured workflow.
+
+For `actions hydrate`, Crabbox inspects the selected workflow's `workflow_dispatch.inputs` when the workflow path is available under `.github/workflows/`. It only sends declared inputs, requires `crabbox_id`, `crabbox_runner_label`, and `crabbox_keep_alive_minutes`, and treats `crabbox_job` as optional. If GitHub still rejects `crabbox_job` as an unexpected input, Crabbox retries once without it so older workflow refs remain usable.
 
 ```sh
 crabbox warmup --actions-runner --idle-timeout 90m
@@ -39,7 +41,7 @@ actions:
 ```
 
 Workflow jobs should target the dynamic label printed by registration, for example `crabbox-cbx-123`, plus any static labels configured for the project.
-When `actions.job` is set, Crabbox sends it as `crabbox_job` and verifies that the ready marker came from that job. Older workflows can omit both.
+When `actions.job` is set and the workflow declares `crabbox_job`, Crabbox sends it and verifies that the ready marker came from that job. Older workflows can omit both.
 
 ## Hydration Flow
 

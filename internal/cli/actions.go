@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"encoding/base64"
 	"fmt"
 	"io"
 	"net/url"
@@ -10,6 +11,8 @@ import (
 	"regexp"
 	"strings"
 	"time"
+
+	"gopkg.in/yaml.v3"
 )
 
 type GitHubRepo struct {
@@ -94,11 +97,38 @@ func (a App) actionsHydrate(ctx context.Context, args []string) error {
 	}
 	ref := actionsRef(cfg, repo)
 	fields := actionsHydrateFields(leaseID, label, cfg.Actions.Job, *keepAliveMinutes, fieldFlags)
+	if inputs, ok, err := githubWorkflowDispatchInputs(ctx, repo.Root, ghRepo, cfg.Actions.Workflow, ref); err != nil {
+		fmt.Fprintf(a.Stderr, "warning: inspect workflow inputs failed: %v\n", err)
+	} else if ok {
+		filtered, dropped := filterWorkflowInputs(fields, inputs)
+		for _, field := range dropped {
+			fmt.Fprintf(a.Stderr, "warning: workflow %s does not declare input %s; omitting it\n", cfg.Actions.Workflow, fieldName(field))
+		}
+		fields = filtered
+		for _, required := range []string{"crabbox_id", "crabbox_runner_label", "crabbox_keep_alive_minutes"} {
+			if !inputs[required] {
+				return exit(2, "workflow %s at %s does not declare required hydrate input %s", cfg.Actions.Workflow, ref, required)
+			}
+		}
+	}
+	expectedJob := cfg.Actions.Job
+	if !workflowFieldsContain(fields, "crabbox_job") {
+		expectedJob = ""
+	}
 	if err := dispatchGitHubActionsWorkflow(ctx, repo.Root, ghRepo, cfg.Actions.Workflow, ref, fields); err != nil {
-		return err
+		if expectedJob != "" && strings.Contains(err.Error(), "Unexpected input") {
+			fields = dropWorkflowField(fields, "crabbox_job")
+			expectedJob = ""
+			fmt.Fprintf(a.Stderr, "warning: retrying workflow dispatch without crabbox_job for compatibility\n")
+			if retryErr := dispatchGitHubActionsWorkflow(ctx, repo.Root, ghRepo, cfg.Actions.Workflow, ref, fields); retryErr != nil {
+				return retryErr
+			}
+		} else {
+			return err
+		}
 	}
 	fmt.Fprintf(a.Stdout, "dispatched workflow=%s repo=%s ref=%s runner_label=%s\n", cfg.Actions.Workflow, ghRepo.Slug(), ref, label)
-	state, err := waitForActionsHydration(ctx, target, leaseID, cfg.Actions.Job, *waitTimeout, a.Stderr)
+	state, err := waitForActionsHydration(ctx, target, leaseID, expectedJob, *waitTimeout, a.Stderr)
 	if err != nil {
 		return err
 	}
@@ -258,6 +288,122 @@ func actionsHydrateFields(leaseID, label, job string, keepAliveMinutes int, extr
 	}
 	fields = append(fields, extra...)
 	return fields
+}
+
+func githubWorkflowDispatchInputs(ctx context.Context, dir string, repo GitHubRepo, workflow, ref string) (map[string]bool, bool, error) {
+	workflow = strings.TrimPrefix(workflow, "/")
+	if !strings.HasPrefix(workflow, ".github/workflows/") {
+		return nil, false, nil
+	}
+	out, err := ghOutput(ctx, dir, "api", "repos/"+repo.Slug()+"/contents/"+workflow+"?ref="+url.QueryEscape(ref), "--jq", ".content")
+	if err != nil {
+		return nil, false, err
+	}
+	encoded := strings.Map(func(r rune) rune {
+		if r == '\n' || r == '\r' || r == ' ' || r == '\t' {
+			return -1
+		}
+		return r
+	}, out)
+	data, err := base64.StdEncoding.DecodeString(encoded)
+	if err != nil {
+		return nil, false, err
+	}
+	inputs, ok, err := parseWorkflowDispatchInputs(data)
+	return inputs, ok, err
+}
+
+func parseWorkflowDispatchInputs(data []byte) (map[string]bool, bool, error) {
+	var doc yaml.Node
+	if err := yaml.Unmarshal(data, &doc); err != nil {
+		return nil, false, err
+	}
+	root := mappingValue(&doc, "")
+	if root == nil {
+		return nil, false, nil
+	}
+	on := mappingValue(root, "on")
+	if on == nil {
+		return nil, false, nil
+	}
+	dispatch := mappingValue(on, "workflow_dispatch")
+	if dispatch == nil {
+		return nil, false, nil
+	}
+	inputsNode := mappingValue(dispatch, "inputs")
+	if inputsNode == nil || inputsNode.Kind != yaml.MappingNode {
+		return map[string]bool{}, true, nil
+	}
+	inputs := map[string]bool{}
+	for i := 0; i+1 < len(inputsNode.Content); i += 2 {
+		inputs[inputsNode.Content[i].Value] = true
+	}
+	return inputs, true, nil
+}
+
+func mappingValue(node *yaml.Node, key string) *yaml.Node {
+	if node == nil {
+		return nil
+	}
+	if node.Kind == yaml.DocumentNode && len(node.Content) > 0 {
+		if key == "" {
+			return node.Content[0]
+		}
+		return mappingValue(node.Content[0], key)
+	}
+	if key == "" {
+		if node.Kind == yaml.MappingNode {
+			return node
+		}
+		return nil
+	}
+	if node.Kind != yaml.MappingNode {
+		return nil
+	}
+	for i := 0; i+1 < len(node.Content); i += 2 {
+		if node.Content[i].Value == key {
+			return node.Content[i+1]
+		}
+	}
+	return nil
+}
+
+func filterWorkflowInputs(fields []string, inputs map[string]bool) ([]string, []string) {
+	filtered := make([]string, 0, len(fields))
+	dropped := []string{}
+	for _, field := range fields {
+		name := fieldName(field)
+		if inputs[name] {
+			filtered = append(filtered, field)
+		} else {
+			dropped = append(dropped, field)
+		}
+	}
+	return filtered, dropped
+}
+
+func workflowFieldsContain(fields []string, name string) bool {
+	for _, field := range fields {
+		if fieldName(field) == name {
+			return true
+		}
+	}
+	return false
+}
+
+func dropWorkflowField(fields []string, name string) []string {
+	out := fields[:0]
+	for _, field := range fields {
+		if fieldName(field) != name {
+			out = append(out, field)
+		}
+	}
+	return out
+}
+
+func fieldName(field string) string {
+	name, _, _ := strings.Cut(field, "=")
+	return name
 }
 
 func actionsRef(cfg Config, repo Repo) string {

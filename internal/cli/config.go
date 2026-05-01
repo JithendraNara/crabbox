@@ -47,6 +47,12 @@ type SyncConfig struct {
 	GitSeed     bool
 	Fingerprint bool
 	BaseRef     string
+	Timeout     time.Duration
+	WarnFiles   int
+	WarnBytes   int64
+	FailFiles   int
+	FailBytes   int64
+	AllowLarge  bool
 }
 
 type CapacityConfig struct {
@@ -131,6 +137,11 @@ func baseConfig() Config {
 			Checksum:    false,
 			GitSeed:     true,
 			Fingerprint: true,
+			Timeout:     15 * time.Minute,
+			WarnFiles:   50_000,
+			WarnBytes:   5 * 1024 * 1024 * 1024,
+			FailFiles:   150_000,
+			FailBytes:   20 * 1024 * 1024 * 1024,
 		},
 		EnvAllow: []string{"CI", "NODE_OPTIONS"},
 		Capacity: CapacityConfig{
@@ -207,6 +218,12 @@ type fileSyncConfig struct {
 	GitSeed     *bool    `yaml:"gitSeed,omitempty"`
 	Fingerprint *bool    `yaml:"fingerprint,omitempty"`
 	BaseRef     string   `yaml:"baseRef,omitempty"`
+	Timeout     string   `yaml:"timeout,omitempty"`
+	WarnFiles   int      `yaml:"warnFiles,omitempty"`
+	WarnBytes   int64    `yaml:"warnBytes,omitempty"`
+	FailFiles   int      `yaml:"failFiles,omitempty"`
+	FailBytes   int64    `yaml:"failBytes,omitempty"`
+	AllowLarge  *bool    `yaml:"allowLarge,omitempty"`
 }
 
 type fileEnvConfig struct {
@@ -413,6 +430,26 @@ func applyFileConfig(cfg *Config, file fileConfig) {
 		if file.Sync.BaseRef != "" {
 			cfg.Sync.BaseRef = file.Sync.BaseRef
 		}
+		if file.Sync.Timeout != "" {
+			if timeout, err := time.ParseDuration(file.Sync.Timeout); err == nil {
+				cfg.Sync.Timeout = timeout
+			}
+		}
+		if file.Sync.WarnFiles > 0 {
+			cfg.Sync.WarnFiles = file.Sync.WarnFiles
+		}
+		if file.Sync.WarnBytes > 0 {
+			cfg.Sync.WarnBytes = file.Sync.WarnBytes
+		}
+		if file.Sync.FailFiles > 0 {
+			cfg.Sync.FailFiles = file.Sync.FailFiles
+		}
+		if file.Sync.FailBytes > 0 {
+			cfg.Sync.FailBytes = file.Sync.FailBytes
+		}
+		if file.Sync.AllowLarge != nil {
+			cfg.Sync.AllowLarge = *file.Sync.AllowLarge
+		}
 	}
 	if file.Env != nil && len(file.Env.Allow) > 0 {
 		cfg.EnvAllow = appendUniqueStrings(nil, file.Env.Allow...)
@@ -552,6 +589,18 @@ func applyEnv(cfg *Config) {
 	}
 	if value, ok := getenvBool("CRABBOX_SYNC_FINGERPRINT"); ok {
 		cfg.Sync.Fingerprint = value
+	}
+	if timeout := os.Getenv("CRABBOX_SYNC_TIMEOUT"); timeout != "" {
+		if parsed, err := time.ParseDuration(timeout); err == nil {
+			cfg.Sync.Timeout = parsed
+		}
+	}
+	cfg.Sync.WarnFiles = getenvInt("CRABBOX_SYNC_WARN_FILES", cfg.Sync.WarnFiles)
+	cfg.Sync.WarnBytes = int64(getenvInt("CRABBOX_SYNC_WARN_BYTES", int(cfg.Sync.WarnBytes)))
+	cfg.Sync.FailFiles = getenvInt("CRABBOX_SYNC_FAIL_FILES", cfg.Sync.FailFiles)
+	cfg.Sync.FailBytes = int64(getenvInt("CRABBOX_SYNC_FAIL_BYTES", int(cfg.Sync.FailBytes)))
+	if value, ok := getenvBool("CRABBOX_SYNC_ALLOW_LARGE"); ok {
+		cfg.Sync.AllowLarge = value
 	}
 	cfg.Sync.BaseRef = getenv("CRABBOX_SYNC_BASE_REF", cfg.Sync.BaseRef)
 	if envAllow := os.Getenv("CRABBOX_ENV_ALLOW"); envAllow != "" {

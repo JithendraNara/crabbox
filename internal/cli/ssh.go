@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"io"
@@ -128,12 +129,21 @@ func sshArgs(target SSHTarget, remote string) []string {
 }
 
 type rsyncOptions struct {
-	Debug    bool
-	Delete   bool
-	Checksum bool
+	Debug             bool
+	Delete            bool
+	Checksum          bool
+	UseFilesFrom      bool
+	FilesFrom         []byte
+	Timeout           time.Duration
+	HeartbeatInterval time.Duration
 }
 
 func rsync(ctx context.Context, target SSHTarget, src, dst string, excludes []string, stdout, stderr io.Writer, opts rsyncOptions) error {
+	if opts.Timeout > 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, opts.Timeout)
+		defer cancel()
+	}
 	args := []string{
 		"-az",
 		"-e", strings.Join([]string{
@@ -149,28 +159,59 @@ func rsync(ctx context.Context, target SSHTarget, src, dst string, excludes []st
 			"-p", shellQuote(target.Port),
 		}, " "),
 	}
-	if opts.Delete {
+	if opts.Delete && !opts.UseFilesFrom {
 		args = append(args, "--delete")
 	}
 	if opts.Checksum {
 		args = append(args, "--checksum")
 	}
+	if opts.UseFilesFrom {
+		args = append(args, "--files-from=-", "--from0")
+	}
 	for _, exclude := range excludes {
 		args = append(args, "--exclude", exclude)
 	}
 	if opts.Debug {
-		args = append(args, "--stats", "--itemize-changes")
+		args = append(args, "--stats", "--itemize-changes", "--progress")
 	}
 	args = append(args, ensureTrailingSlash(src), target.User+"@"+target.Host+":"+dst+"/")
 	start := time.Now()
 	cmd := exec.CommandContext(ctx, "rsync", args...)
+	if opts.UseFilesFrom {
+		cmd.Stdin = bytes.NewReader(opts.FilesFrom)
+	}
 	cmd.Stdout = stdout
 	cmd.Stderr = stderr
+	stopHeartbeat := startSyncHeartbeat(stderr, start, opts.HeartbeatInterval)
 	err := cmd.Run()
+	stopHeartbeat()
+	if ctx.Err() == context.DeadlineExceeded {
+		return exit(6, "rsync timed out after %s", opts.Timeout)
+	}
 	if opts.Debug {
 		fmt.Fprintf(stderr, "rsync elapsed=%s checksum=%t delete=%t\n", time.Since(start).Round(time.Millisecond), opts.Checksum, opts.Delete)
 	}
 	return err
+}
+
+func startSyncHeartbeat(stderr io.Writer, start time.Time, interval time.Duration) func() {
+	if interval <= 0 {
+		return func() {}
+	}
+	done := make(chan struct{})
+	go func() {
+		ticker := time.NewTicker(interval)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-done:
+				return
+			case <-ticker.C:
+				fmt.Fprintf(stderr, "still syncing after %s...\n", time.Since(start).Round(time.Second))
+			}
+		}
+	}()
+	return func() { close(done) }
 }
 
 func ensureTrailingSlash(path string) string {
@@ -283,6 +324,58 @@ func remoteReadSyncFingerprint(workdir string) string {
 
 func remoteWriteSyncFingerprint(workdir, fingerprint string) string {
 	return "mkdir -p " + shellQuote(workdir+"/.crabbox") + " && printf %s " + shellQuote(fingerprint) + " > " + shellQuote(workdir+"/.crabbox/sync-fingerprint")
+}
+
+func remoteWriteSyncManifestNew(workdir string) string {
+	return "mkdir -p " + shellQuote(workdir+"/.crabbox") + " && cat > " + shellQuote(workdir+"/.crabbox/sync-manifest.new")
+}
+
+func remoteWriteSyncDeletedNew(workdir string) string {
+	return "mkdir -p " + shellQuote(workdir+"/.crabbox") + " && cat > " + shellQuote(workdir+"/.crabbox/sync-deleted.new")
+}
+
+func remotePruneSyncManifest(workdir string) string {
+	script := "set -e\ncd " + shellQuote(workdir) + `
+old=.crabbox/sync-manifest
+new=.crabbox/sync-manifest.new
+deleted=.crabbox/sync-deleted.new
+delete_paths() {
+  while IFS= read -r -d '' rel; do
+    case "$rel" in ''|/*|../*|*/../*) continue ;; esac
+    rm -f -- "$rel"
+    dir=$(dirname -- "$rel")
+    while [ "$dir" != . ] && [ "$dir" != / ]; do
+      rmdir -- "$dir" 2>/dev/null || break
+      dir=$(dirname -- "$dir")
+    done
+  done
+}
+manifest_removed_paths() {
+  python3 - "$old" "$new" <<'PY'
+import pathlib
+import sys
+
+def read_manifest(path):
+    try:
+        data = pathlib.Path(path).read_bytes()
+    except FileNotFoundError:
+        return []
+    return [entry for entry in data.split(b"\0") if entry]
+
+old = read_manifest(sys.argv[1])
+new = set(read_manifest(sys.argv[2]))
+sys.stdout.buffer.write(b"".join(entry + b"\0" for entry in old if entry not in new))
+PY
+}
+if [ -f "$deleted" ]; then delete_paths < "$deleted"; fi
+if [ -f "$old" ] && [ -f "$new" ]; then manifest_removed_paths | delete_paths; fi
+`
+	return "bash -lc " + shellQuote(script)
+}
+
+func remoteApplySyncManifest(workdir string) string {
+	script := "set -e; cd " + shellQuote(workdir) + "; mkdir -p .crabbox; new=.crabbox/sync-manifest.new; deleted=.crabbox/sync-deleted.new; rm -f \"$deleted\"; mv \"$new\" .crabbox/sync-manifest"
+	return "bash -lc " + shellQuote(script)
 }
 
 func remoteSyncSanity(workdir string, allowMassDeletions bool) string {

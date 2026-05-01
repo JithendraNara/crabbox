@@ -4,7 +4,7 @@
 
 Crabbox is a shared remote testbox system for OpenClaw maintainers and AI agents. The goal is to keep the local developer story unchanged - edit, save, run - while moving compute and tests onto owned cloud capacity.
 
-A `crabbox run` command leases a Linux machine, syncs your current dirty checkout, executes the command remotely, streams stdout and stderr back, and releases the machine. Behind the scenes a small Cloudflare-hosted broker owns provider credentials, lease state, cleanup, usage, and cost guardrails so individual machines and CLIs never need to.
+A `crabbox run` command leases a Linux machine, syncs your tracked and nonignored local files, executes the command remotely, streams stdout and stderr back, and releases the machine. Behind the scenes a small Cloudflare-hosted broker owns provider credentials, lease state, cleanup, usage, and cost guardrails so individual machines and CLIs never need to.
 
 ## How it fits together
 
@@ -24,7 +24,7 @@ The CLI is a Go binary. The broker is a Cloudflare Worker plus a single Durable 
 1. CLI loads config from flags, env, repo, user, defaults.
 2. CLI mints a per-lease SSH key, calls `POST /v1/leases` on the broker.
 3. Worker checks active-lease and monthly spend caps, reserves worst-case TTL cost, provisions a server, returns host / port / user / workdir / expiry.
-4. CLI waits for `crabbox-ready`, seeds remote Git when possible, rsyncs the dirty checkout, runs sanity checks, hydrates the configured base ref.
+4. CLI waits for `crabbox-ready`, seeds remote Git when possible, rsyncs the Git file-list manifest, runs sync guardrails and sanity checks, hydrates the configured base ref.
 5. CLI runs the command over SSH, streams output, sends heartbeats.
 6. CLI releases the lease unless `--keep` is set; the broker terminates the runner and frees the reserved cost.
 

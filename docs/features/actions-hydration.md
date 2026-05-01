@@ -6,18 +6,24 @@ Read when:
 - changing `crabbox actions hydrate`;
 - deciding whether setup belongs in Crabbox or in a repository workflow.
 
-Actions hydration lets a repository reuse its existing GitHub Actions setup without asking Crabbox to understand workflow YAML.
+Actions hydration lets a repository reuse its existing GitHub Actions setup without putting repository-specific setup code in the Crabbox binary.
 
 The flow:
 
 1. `crabbox warmup --idle-timeout 90m` leases a machine.
 2. `crabbox actions hydrate --id cbx_...` registers that machine as an ephemeral self-hosted runner for the repository.
-3. Crabbox dispatches the configured workflow with the lease ID, dynamic runner label, keepalive timeout, and optional expected hydrate job.
+3. Crabbox inspects the configured workflow's `workflow_dispatch.inputs` when it can read the workflow path, then dispatches it with the lease ID, dynamic runner label, keepalive timeout, and optional expected hydrate job.
 4. The workflow runs on `[self-hosted, crabbox-cbx-...]`, checks out the repo, installs dependencies, starts services, warms caches, and performs any repo-specific setup.
 5. The workflow writes `$HOME/.crabbox/actions/<lease>.env` with `WORKSPACE`, `RUN_ID`, `JOB`, `ENV_FILE`, `SERVICES_FILE`, and `READY_AT`.
 6. `crabbox run --id cbx_... -- <command>` reads that marker, syncs the local dirty checkout into `$GITHUB_WORKSPACE`, and sources the non-secret env file when present.
 
 The important boundary: project setup lives in the repository workflow. Crabbox owns runner registration, dispatch, marker waiting, SSH sync, and command execution. It does not contain repository-specific setup code.
+
+Input compatibility:
+
+- `crabbox_id`, `crabbox_runner_label`, and `crabbox_keep_alive_minutes` must be declared when Crabbox can inspect the workflow.
+- `crabbox_job` is optional. Crabbox sends it only when the workflow declares it, or retries once without it when GitHub reports an unexpected input.
+- Extra `-f key=value` fields are sent only when the inspected workflow declares those inputs.
 
 Repo config:
 

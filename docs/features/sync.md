@@ -6,18 +6,29 @@ Read when:
 - debugging missing or stale files on a runner;
 - changing Git seeding, fingerprints, excludes, or env forwarding.
 
-Crabbox syncs the current dirty checkout to the leased runner before running a command.
+Crabbox syncs the current checkout to the leased runner before running a command.
+It syncs the Git-managed working set, not the whole directory tree:
+
+- tracked files from `git ls-files --cached`;
+- nonignored untracked files from `git ls-files --others --exclude-standard`;
+- repo-local `sync.exclude` patterns and Crabbox's default cache/build excludes.
+
+Ignored build output, dependency folders, `.git`, and common local caches stay out of the transfer. This keeps first syncs close to the code that CI would see while still letting agents test uncommitted edits.
 
 Sync flow:
 
 1. pick the local repository root;
 2. seed remote Git from the configured origin/base ref when possible;
-3. compute or reuse a sync fingerprint;
-4. skip rsync when the fingerprint matches;
-5. rsync local files into `/work/crabbox/<lease>/<repo>`;
-6. apply delete semantics when configured;
-7. run sanity checks for mass tracked deletions;
-8. hydrate configured base-ref history for changed-test workflows.
+3. build a NUL-delimited sync manifest from Git's tracked and nonignored file list;
+4. print a file/byte estimate and enforce configured large-sync guardrails;
+5. compute or reuse a sync fingerprint from the commit, dirty metadata, and manifest;
+6. skip rsync when the fingerprint matches;
+7. feed the manifest to rsync with `--files-from=- --from0`;
+8. delete previously managed remote files that disappeared from the manifest when delete sync is enabled;
+9. run sanity checks for mass tracked deletions;
+10. hydrate configured base-ref history for changed-test workflows.
+
+The remote manifest deletion step only removes paths Crabbox previously synced. It does not delete workflow-created state, package caches, `.git`, or other local runner files outside the managed file list.
 
 Important controls:
 
@@ -27,8 +38,28 @@ CRABBOX_SYNC_DELETE
 CRABBOX_SYNC_GIT_SEED
 CRABBOX_SYNC_FINGERPRINT
 CRABBOX_SYNC_BASE_REF
+CRABBOX_SYNC_TIMEOUT
+CRABBOX_SYNC_WARN_FILES
+CRABBOX_SYNC_WARN_BYTES
+CRABBOX_SYNC_FAIL_FILES
+CRABBOX_SYNC_FAIL_BYTES
+CRABBOX_SYNC_ALLOW_LARGE
 CRABBOX_ENV_ALLOW
 ```
+
+Defaults:
+
+```yaml
+sync:
+  timeout: 15m
+  warnFiles: 50000
+  warnBytes: 5368709120
+  failFiles: 150000
+  failBytes: 21474836480
+  allowLarge: false
+```
+
+`crabbox run --force-sync-large` bypasses the fail thresholds for one run. `--debug` adds rsync progress/stat output; normal syncs still print a heartbeat when rsync is quiet for a while.
 
 Repo-local config should hold project-specific excludes and env allowlists. Secrets must not be passed as command-line arguments or broad env globs.
 

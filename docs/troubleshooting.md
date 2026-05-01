@@ -113,20 +113,48 @@ Symptoms:
 - changed-test detection sees the wrong base;
 - deleted files unexpectedly appear remotely;
 - sync aborts on mass tracked deletions.
+- sync warns or fails before rsync because the candidate tree is too large.
 
 Checks:
 
 ```sh
 git status --short
+git ls-files --cached --others --exclude-standard | wc -l
 bin/crabbox run --id cbx_... -- git status --short
+bin/crabbox run --id cbx_... --sync-only --debug
 ```
 
 Fixes:
 
 - commit, stash, or intentionally keep local deletions before syncing;
+- add generated directories to `.gitignore` or `.crabbox.yaml` `sync.exclude`;
+- keep `.git`, build caches, and package caches out of the repo source tree;
+- use `--force-sync-large` only after verifying the candidate file count and bytes are expected;
 - check repo-local `.crabbox.yaml` sync excludes;
 - rerun without relying on the sync fingerprint after large tree changes;
 - verify base-ref hydration in repo config.
+
+## Sync Stalls Or Times Out
+
+Symptoms:
+
+- rsync prints little output for a long time;
+- `rsync timed out after ...`;
+- a local cache directory made the first sync unexpectedly huge.
+
+Checks:
+
+```sh
+bin/crabbox config show
+bin/crabbox run --id cbx_... --sync-only --debug
+```
+
+Fixes:
+
+- inspect the printed sync candidate estimate before retrying;
+- lower `sync.timeout` for quick failure in agent loops, or raise it for intentionally large source transfers;
+- tune `sync.warnFiles`, `sync.warnBytes`, `sync.failFiles`, and `sync.failBytes` in repo config;
+- stop and warm a fresh lease if the remote workspace looks corrupted.
 
 ## Actions Hydration Times Out
 

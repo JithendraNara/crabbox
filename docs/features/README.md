@@ -14,7 +14,7 @@ Core features:
 - [Broker auth and routing](broker-auth-routing.md): bearer tokens, Cloudflare Access identity, and Worker routes.
 - [Providers](providers.md): Hetzner and AWS EC2 Spot provisioning, classes, and fallback.
 - [Runner bootstrap](runner-bootstrap.md): cloud-init, installed tools, SSH port, and readiness.
-- [Sync](sync.md): Git seeding, rsync, fingerprints, excludes, and sanity checks.
+- [Sync](sync.md): Git file-list manifests, rsync, fingerprints, excludes, guardrails, and sanity checks.
 - [Actions hydration](actions-hydration.md): let GitHub Actions prepare a runner, then sync local work into that workspace.
 - [SSH keys](ssh-keys.md): per-lease keys, provider key cleanup, and local storage.
 - [Cost and usage](cost-usage.md): guardrails, provider-backed pricing, and reporting.
