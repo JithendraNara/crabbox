@@ -1,27 +1,65 @@
 # Crabbox Docs
 
-Crabbox is a shared remote testbox system for OpenClaw. It gives maintainers a fast local workflow on owned machines: acquire a box, sync the current dirty tree, run tests remotely, stream output, and clean up safely.
+## What Crabbox is
 
-The GitHub Pages site is generated from these Markdown files by `scripts/build-docs-site.mjs`. Markdown remains the source of truth; the generated site lives in `dist/docs-site` during local builds and is deployed by `.github/workflows/pages.yml`.
+Crabbox is a shared remote testbox system for OpenClaw maintainers and AI agents. The goal is to keep the local developer story unchanged - edit, save, run - while moving compute and tests onto owned cloud capacity.
 
-Pages deploy uses GitHub Actions. The repository or organization must allow GitHub Pages before the workflow can publish.
+A `crabbox run` command leases a Linux machine, syncs your current dirty checkout, executes the command remotely, streams stdout and stderr back, and releases the machine. Behind the scenes a small Cloudflare-hosted broker owns provider credentials, lease state, cleanup, usage, and cost guardrails so individual machines and CLIs never need to.
 
-Start here:
+## How it fits together
 
-- [How Crabbox Works](how-it-works.md): end-to-end overview of the CLI, broker, providers, runners, sync, cleanup, cost, and usage.
-- [Architecture](architecture.md): components, lease flow, data model, and backends.
-- [Orchestrator](orchestrator.md): coordinator behavior, leases, status, cleanup, and heartbeats.
-- [CLI](cli.md): command surface, flags, config, output, and exit codes.
-- [Operations](operations.md): deployment, health checks, secrets, routes, cleanup, and cost guardrails.
-- [Observability](observability.md): where to look for status, usage, logs, run IDs, and remote machine state.
-- [Troubleshooting](troubleshooting.md): symptom-based checks for broker, SSH, sync, Actions hydration, provider capacity, and Pages.
-- [Performance](performance.md): warm leases, sync fingerprints, Git hydration, package caches, and provider class choices.
-- [Commands](commands/README.md): one page per command.
-- [Features](features/README.md): one page per feature area.
-- [Actions hydration](features/actions-hydration.md): reuse GitHub Actions setup, then run local commands remotely.
-- [MVP Plan](mvp-plan.md): what to build, in order.
-- [Infrastructure](infrastructure.md): Cloudflare, Hetzner, DNS, Access, and fleet setup.
-- [Security](security.md): auth, secrets, SSH, cleanup, and trust boundaries.
+```text
+your laptop                Cloudflare Worker            cloud provider
+-------------              ------------------           --------------
+crabbox CLI    -- HTTPS --> Fleet Durable Object  -->   Hetzner / AWS Spot
+   |                         lease + cost state              |
+   |                                                         |
+   +------------ SSH + rsync to leased runner <--------------+
+```
+
+The CLI is a Go binary. The broker is a Cloudflare Worker plus a single Durable Object. Runners are vanilla Ubuntu boxes prepared by cloud-init with Node, pnpm, Docker, Git, rsync, and `/work/crabbox`. Runners hold no broker credentials - they are leaf nodes.
+
+## A run, end to end
+
+1. CLI loads config from flags, env, repo, user, defaults.
+2. CLI mints a per-lease SSH key, calls `POST /v1/leases` on the broker.
+3. Worker checks active-lease and monthly spend caps, reserves worst-case TTL cost, provisions a server, returns host / port / user / workdir / expiry.
+4. CLI waits for `crabbox-ready`, seeds remote Git when possible, rsyncs the dirty checkout, runs sanity checks, hydrates the configured base ref.
+5. CLI runs the command over SSH, streams output, sends heartbeats.
+6. CLI releases the lease unless `--keep` is set; the broker terminates the runner and frees the reserved cost.
+
+See [How Crabbox Works](how-it-works.md) for the full picture, including warm-machine reuse and the brokered vs direct provider paths.
+
+## Quick start
+
+```sh
+# log in once per machine - stores a bearer token in the OS keychain
+crabbox login
+
+# one-shot run on a fresh leased box
+crabbox run -- pnpm test
+
+# keep a warm box around for repeated runs
+crabbox warmup --idle-timeout 90m
+crabbox run --id cbx_8f2 -- pnpm test:changed
+crabbox ssh --id cbx_8f2
+crabbox stop cbx_8f2
+```
+
+`crabbox doctor` validates local config, network reachability, and SSH key availability before you commit to a long workflow. `crabbox usage` summarizes recent spend by user, org, provider, and server type.
+
+## Where to read next
+
+Pick whichever matches your intent:
+
+- **Get the mental model:** [How Crabbox Works](how-it-works.md), [Architecture](architecture.md), [Orchestrator](orchestrator.md).
+- **Use the CLI:** [CLI](cli.md), [Commands](commands/README.md), [Features](features/README.md), [Actions hydration](features/actions-hydration.md).
+- **Operate it:** [Operations](operations.md), [Observability](observability.md), [Troubleshooting](troubleshooting.md), [Performance](performance.md).
+- **Set it up or audit it:** [Infrastructure](infrastructure.md), [Security](security.md), [MVP Plan](mvp-plan.md).
+
+## About these docs
+
+Markdown in this directory is the source of truth. The GitHub Pages site at <https://openclaw.github.io/crabbox/> is generated from those files by `scripts/build-docs-site.mjs` and deployed by `.github/workflows/pages.yml`. Pages must be enabled on the repository or organization for the workflow to publish.
 
 Build the docs site locally:
 
