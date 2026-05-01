@@ -76,6 +76,7 @@ type ActionsConfig struct {
 	Workflow      string
 	Job           string
 	Ref           string
+	Fields        []string
 	RunnerLabels  []string
 	RunnerVersion string
 	Ephemeral     bool
@@ -282,6 +283,7 @@ type fileActionsConfig struct {
 	Workflow      string   `yaml:"workflow,omitempty"`
 	Job           string   `yaml:"job,omitempty"`
 	Ref           string   `yaml:"ref,omitempty"`
+	Fields        []string `yaml:"fields,omitempty"`
 	RunnerLabels  []string `yaml:"runnerLabels,omitempty"`
 	RunnerVersion string   `yaml:"runnerVersion,omitempty"`
 	Ephemeral     *bool    `yaml:"ephemeral,omitempty"`
@@ -582,6 +584,9 @@ func applyFileConfig(cfg *Config, file fileConfig) {
 		}
 		if file.Actions.Ref != "" {
 			cfg.Actions.Ref = file.Actions.Ref
+		}
+		if len(file.Actions.Fields) > 0 {
+			cfg.Actions.Fields = appendUniqueStrings(nil, file.Actions.Fields...)
 		}
 		if len(file.Actions.RunnerLabels) > 0 {
 			cfg.Actions.RunnerLabels = appendUniqueStrings(nil, file.Actions.RunnerLabels...)
