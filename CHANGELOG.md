@@ -1,8 +1,22 @@
 # Changelog
 
-## Unreleased
+## 0.2.0 - Unreleased
 
-- No unreleased changes yet.
+### Added
+
+- Added GitHub browser login for `crabbox login`, including signed user tokens, polling-based CLI completion, `--no-browser`, and JSON output support.
+- Added coordinator OAuth routes for GitHub login: `/v1/auth/github/start`, `/v1/auth/github/callback`, and `/v1/auth/github/poll`.
+- Added signed non-admin user-token auth in the Worker while keeping the shared operator token for admin routes.
+- Added the canonical coordinator endpoint `https://crabbox.openclaw.ai`, with `CRABBOX_PUBLIC_URL` configured for OAuth callback generation.
+
+### Changed
+
+- Updated CLI defaults, docs, examples, and auth guidance to prefer `https://crabbox.openclaw.ai`.
+- Clarified that Cloudflare Access OAuth and Crabbox CLI OAuth are separate GitHub OAuth apps with separate callback URLs.
+
+### Fixed
+
+- Restricted Worker admin routes to shared-token admin auth so GitHub browser-login users cannot call admin endpoints.
 
 ## 0.1.0 - 2026-05-01
 
