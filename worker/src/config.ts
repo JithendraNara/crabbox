@@ -14,7 +14,11 @@ export interface LeaseConfig {
   awsProfile: string;
   awsRootGB: number;
   capacityMarket: "spot" | "on-demand";
-  capacityStrategy: "most-available" | "price-capacity-optimized" | "capacity-optimized" | "sequential";
+  capacityStrategy:
+    | "most-available"
+    | "price-capacity-optimized"
+    | "capacity-optimized"
+    | "sequential";
   capacityFallback: string;
   capacityRegions: string[];
   capacityAvailabilityZones: string[];
@@ -98,11 +102,37 @@ export function awsInstanceTypeCandidatesForClass(machineClass: string): string[
     case "standard":
       return ["c7a.8xlarge", "c7i.8xlarge", "m7a.8xlarge", "m7i.8xlarge", "c7a.4xlarge"];
     case "fast":
-      return ["c7a.16xlarge", "c7i.16xlarge", "m7a.16xlarge", "m7i.16xlarge", "c7a.12xlarge", "c7a.8xlarge"];
+      return [
+        "c7a.16xlarge",
+        "c7i.16xlarge",
+        "m7a.16xlarge",
+        "m7i.16xlarge",
+        "c7a.12xlarge",
+        "c7a.8xlarge",
+      ];
     case "large":
-      return ["c7a.24xlarge", "c7i.24xlarge", "m7a.24xlarge", "m7i.24xlarge", "r7a.24xlarge", "c7a.16xlarge", "c7a.12xlarge"];
+      return [
+        "c7a.24xlarge",
+        "c7i.24xlarge",
+        "m7a.24xlarge",
+        "m7i.24xlarge",
+        "r7a.24xlarge",
+        "c7a.16xlarge",
+        "c7a.12xlarge",
+      ];
     case "beast":
-      return ["c7a.48xlarge", "c7i.48xlarge", "m7a.48xlarge", "m7i.48xlarge", "r7a.48xlarge", "c7a.32xlarge", "c7i.32xlarge", "m7a.32xlarge", "c7a.24xlarge", "c7a.16xlarge"];
+      return [
+        "c7a.48xlarge",
+        "c7i.48xlarge",
+        "m7a.48xlarge",
+        "m7i.48xlarge",
+        "r7a.48xlarge",
+        "c7a.32xlarge",
+        "c7i.32xlarge",
+        "m7a.32xlarge",
+        "c7a.24xlarge",
+        "c7a.16xlarge",
+      ];
     default:
       return [machineClass];
   }
