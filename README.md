@@ -11,6 +11,21 @@ node scripts/build-docs-site.mjs
 open dist/docs-site/index.html
 ```
 
+## Install
+
+Latest release: `0.1.0`.
+
+```sh
+brew install openclaw/tap/crabbox
+crabbox --version
+```
+
+Without Homebrew, download the matching archive from the `v0.1.0` release on GitHub:
+
+```text
+https://github.com/openclaw/crabbox/releases/tag/v0.1.0
+```
+
 ## How It Works
 
 Crabbox has a small control plane and a simple data plane:
@@ -125,21 +140,14 @@ Not yet done:
 
 Prerequisites:
 
-- Go 1.26+
 - `git`, `ssh`, `ssh-keygen`, `rsync`, and `curl`
 - broker config in `~/.config/crabbox/config.yaml` or `~/Library/Application Support/crabbox/config.yaml` on macOS
-
-Build:
-
-```sh
-go build -o bin/crabbox ./cmd/crabbox
-```
 
 Configure the deployed broker:
 
 ```sh
 printf '%s' "$CRABBOX_COORDINATOR_TOKEN" | \
-  bin/crabbox config set-broker \
+  crabbox config set-broker \
     --url https://crabbox-coordinator.steipete.workers.dev \
     --provider aws \
     --token-stdin
@@ -148,60 +156,60 @@ printf '%s' "$CRABBOX_COORDINATOR_TOKEN" | \
 Check local prerequisites and broker access:
 
 ```sh
-bin/crabbox doctor
+crabbox doctor
 ```
 
 Inspect broker config:
 
 ```sh
-bin/crabbox config show
+crabbox config show
 ```
 
 Onboard a repo for Crabbox:
 
 ```sh
-bin/crabbox init
+crabbox init
 ```
 
 Warm a reusable testbox:
 
 ```sh
-bin/crabbox warmup --profile project-check --class beast
+crabbox warmup --profile project-check --class beast
 ```
 
 Hydrate that box through the repo's GitHub Actions setup, then run local tests inside the hydrated workspace:
 
 ```sh
-bin/crabbox actions hydrate --id blue-lobster
-CI=1 bin/crabbox run --id blue-lobster -- pnpm test:changed:max
+crabbox actions hydrate --id blue-lobster
+CI=1 crabbox run --id blue-lobster -- pnpm test:changed:max
 ```
 
 Use AWS EC2 Spot through the broker:
 
 ```sh
-bin/crabbox warmup --class beast
+crabbox warmup --class beast
 ```
 
 Run a command on an existing lease:
 
 ```sh
-CI=1 bin/crabbox run --id blue-lobster -- pnpm test:changed:max
+CI=1 crabbox run --id blue-lobster -- pnpm test:changed:max
 ```
 
 Inspect and connect:
 
 ```sh
-bin/crabbox status --id blue-lobster
-bin/crabbox ssh --id blue-lobster
-bin/crabbox inspect --id blue-lobster --json
+crabbox status --id blue-lobster
+crabbox ssh --id blue-lobster
+crabbox inspect --id blue-lobster --json
 ```
 
 Inspect usage and estimated cost:
 
 ```sh
-bin/crabbox usage
-bin/crabbox usage --scope org --org openclaw
-bin/crabbox usage --scope all --json
+crabbox usage
+crabbox usage --scope org --org openclaw
+crabbox usage --scope all --json
 ```
 
 `crabbox usage` reads coordinator history, so it requires a configured broker. Cost is an estimate for compute leases, not a provider invoice: the coordinator prefers explicit `CRABBOX_COST_RATES_JSON` overrides, then provider pricing from AWS Spot history or Hetzner server-type prices, then built-in fallback rates. Full reference: [docs/commands/usage.md](docs/commands/usage.md).
@@ -209,13 +217,13 @@ bin/crabbox usage --scope all --json
 Stop a kept server:
 
 ```sh
-bin/crabbox stop blue-lobster
+crabbox stop blue-lobster
 ```
 
 Print the CLI version:
 
 ```sh
-bin/crabbox --version
+crabbox --version
 ```
 
 ## Machine Classes
@@ -315,6 +323,9 @@ capacity:
 aws:
   region: eu-west-1
   rootGB: 400
+lease:
+  idleTimeout: 30m
+  ttl: 90m
 ssh:
   key: ~/.ssh/id_ed25519
   user: crabbox
@@ -332,6 +343,8 @@ CRABBOX_CONFIG                   optional config file override
 CRABBOX_COORDINATOR              optional broker URL override
 CRABBOX_COORDINATOR_TOKEN        optional broker bearer token override
 CRABBOX_DEFAULT_CLASS            default beast
+CRABBOX_IDLE_TIMEOUT             default 30m
+CRABBOX_TTL                      default 90m
 CRABBOX_SERVER_TYPE              provider-specific override
 CRABBOX_HETZNER_LOCATION         default fsn1
 CRABBOX_HETZNER_IMAGE            default ubuntu-24.04
@@ -386,6 +399,12 @@ Do not pass secret values as command-line arguments. Keep provider tokens outsid
 
 ## Development
 
+Build from source:
+
+```sh
+go build -o bin/crabbox ./cmd/crabbox
+```
+
 Run the local gate:
 
 ```sh
@@ -407,6 +426,14 @@ CI runs the same checks on pushes and pull requests.
 ## Releases
 
 Tagged pushes matching `v*` publish Go CLI archives through GoReleaser. Manual reruns can use the `release` workflow with a tag input.
+
+GoReleaser also updates the Homebrew formula in `https://github.com/openclaw/homebrew-tap`, published to users as:
+
+```sh
+brew install openclaw/tap/crabbox
+```
+
+The release workflow needs `HOMEBREW_TAP_GITHUB_TOKEN` with write access to that tap repository.
 
 ## Docs
 
