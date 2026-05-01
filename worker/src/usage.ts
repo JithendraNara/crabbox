@@ -91,8 +91,9 @@ export function leaseCost(
   provider: Provider,
   serverType: string,
   ttlSeconds: number,
+  providerHourlyUSD?: number,
 ): LeaseCost {
-  const hourlyUSD = hourlyRateUSD(env, provider, serverType);
+  const hourlyUSD = hourlyRateUSD(env, provider, serverType, providerHourlyUSD);
   return {
     hourlyUSD,
     maxUSD: roundUSD((Math.max(1, ttlSeconds) / 3600) * hourlyUSD),
@@ -187,11 +188,19 @@ function hourlyRateUSD(
   env: Pick<Env, "CRABBOX_COST_RATES_JSON">,
   provider: Provider,
   serverType: string,
+  providerHourlyUSD?: number,
 ): number {
   const key = `${provider}:${serverType}`;
   const override = rateOverrides(env)[key];
   if (override !== undefined && Number.isFinite(override) && override > 0) {
     return override;
+  }
+  if (
+    providerHourlyUSD !== undefined &&
+    Number.isFinite(providerHourlyUSD) &&
+    providerHourlyUSD > 0
+  ) {
+    return providerHourlyUSD;
   }
   return defaultHourlyUSD[key] ?? (provider === "aws" ? 3 : 0.5);
 }

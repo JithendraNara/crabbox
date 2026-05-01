@@ -113,6 +113,17 @@ export class EC2SpotClient {
     throw new Error(`timed out waiting for AWS instance public IP: ${instanceID}`);
   }
 
+  async hourlySpotPriceUSD(instanceType: string): Promise<number | undefined> {
+    const root = await this.ec2("DescribeSpotPriceHistory", {
+      "InstanceType.1": instanceType,
+      MaxResults: "1",
+      "ProductDescription.1": "Linux/UNIX",
+      StartTime: new Date().toISOString(),
+    });
+    const item = items(record(root["spotPriceHistorySet"])["item"])[0];
+    return positiveFloat(asString(record(item)["spotPrice"]));
+  }
+
   async deleteServer(instanceID: string): Promise<void> {
     await this.ec2("TerminateInstances", { "InstanceId.1": instanceID });
   }
@@ -431,6 +442,11 @@ function positiveInt(value: string | undefined): number {
   }
   const parsed = Number.parseInt(value, 10);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
+}
+
+function positiveFloat(value: string): number | undefined {
+  const parsed = Number.parseFloat(value);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : undefined;
 }
 
 function sanitizeLabel(value: string): string {

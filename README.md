@@ -81,6 +81,7 @@ Working today:
 - sync fingerprint skip for no-change hot runs
 - per-lease SSH keys under the Crabbox config directory
 - coordinator cost guardrails and monthly usage summaries
+- provider-backed price estimates with static fallback rates
 - sync sanity checks for mass tracked deletions
 - shallow Git hydration for configured base-ref detection
 - SSH execution on port `2222`

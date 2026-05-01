@@ -31,4 +31,4 @@ Flags:
 --json
 ```
 
-Cost values are estimates. The orchestrator uses configured hourly rates and lease TTL to reserve budget before provisioning, then usage summaries report elapsed runtime and reserved worst-case cost.
+Cost values are estimates. The orchestrator fetches provider pricing when possible, uses explicit configured rates as overrides, and falls back to built-in defaults if provider pricing is unavailable. It reserves lease TTL cost before provisioning; summaries report elapsed runtime and reserved worst-case cost.

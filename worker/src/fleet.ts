@@ -52,7 +52,17 @@ export class FleetDurableObject implements DurableObject {
     const input = await readJson<LeaseRequest>(request);
     const config = leaseConfig(input);
     const leaseID = validLeaseID(input.leaseID) ? input.leaseID : newLeaseID();
-    const cost = leaseCost(this.env, config.provider, config.serverType, config.ttlSeconds);
+    const provider = this.provider(config.provider, config.awsRegion);
+    const providerHourlyUSD = await provider
+      .hourlyPriceUSD(config.serverType, config)
+      .catch(() => undefined);
+    const cost = leaseCost(
+      this.env,
+      config.provider,
+      config.serverType,
+      config.ttlSeconds,
+      providerHourlyUSD,
+    );
     const now = new Date();
     const record: LeaseRecord = {
       id: leaseID,
@@ -84,25 +94,24 @@ export class FleetDurableObject implements DurableObject {
     if (limitError) {
       return json({ error: "cost_limit_exceeded", message: limitError }, { status: 429 });
     }
-    const provider = this.provider(config.provider, config.awsRegion);
     const { server, serverType } = await provider.createServerWithFallback(config, leaseID, owner);
     record.cloudID = server.cloudID;
     record.serverType = serverType;
     record.serverID = server.id;
     record.serverName = server.name;
     record.host = server.host;
-    record.estimatedHourlyUSD = leaseCost(
+    const finalProviderHourlyUSD = await provider
+      .hourlyPriceUSD(serverType, config)
+      .catch(() => undefined);
+    const finalCost = leaseCost(
       this.env,
       config.provider,
       serverType,
       config.ttlSeconds,
-    ).hourlyUSD;
-    record.maxEstimatedUSD = leaseCost(
-      this.env,
-      config.provider,
-      serverType,
-      config.ttlSeconds,
-    ).maxUSD;
+      finalProviderHourlyUSD,
+    );
+    record.estimatedHourlyUSD = finalCost.hourlyUSD;
+    record.maxEstimatedUSD = finalCost.maxUSD;
     if (config.provider === "aws") {
       record.region = config.awsRegion;
     }
@@ -305,6 +314,10 @@ interface CloudProvider {
   ): Promise<{ server: ProviderMachine; serverType: string }>;
   deleteServer(id: string): Promise<void>;
   deleteSSHKey(name: string): Promise<void>;
+  hourlyPriceUSD(
+    serverType: string,
+    config: ReturnType<typeof leaseConfig>,
+  ): Promise<number | undefined>;
 }
 
 class HetznerProvider implements CloudProvider {
@@ -339,6 +352,13 @@ class HetznerProvider implements CloudProvider {
   async deleteSSHKey(name: string): Promise<void> {
     await this.client.deleteSSHKey(name);
   }
+
+  hourlyPriceUSD(
+    serverType: string,
+    config: ReturnType<typeof leaseConfig>,
+  ): Promise<number | undefined> {
+    return this.client.hourlyPriceUSD(serverType, config.location);
+  }
 }
 
 class AWSProvider implements CloudProvider {
@@ -371,5 +391,9 @@ class AWSProvider implements CloudProvider {
 
   async deleteSSHKey(name: string): Promise<void> {
     await this.client.deleteSSHKey(name);
+  }
+
+  hourlyPriceUSD(serverType: string): Promise<number | undefined> {
+    return this.client.hourlySpotPriceUSD(serverType);
   }
 }

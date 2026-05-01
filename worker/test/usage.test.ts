@@ -58,6 +58,23 @@ describe("usage accounting", () => {
     expect(cost.hourlyUSD).toBe(12);
     expect(cost.maxUSD).toBe(6);
   });
+
+  it("uses provider-fetched hourly prices when no override is configured", () => {
+    const cost = leaseCost({}, "aws", "c7a.48xlarge", 1800, 4);
+    expect(cost.hourlyUSD).toBe(4);
+    expect(cost.maxUSD).toBe(2);
+  });
+
+  it("keeps explicit rate overrides above provider-fetched prices", () => {
+    const cost = leaseCost(
+      { CRABBOX_COST_RATES_JSON: '{"aws:c7a.48xlarge":12}' },
+      "aws",
+      "c7a.48xlarge",
+      1800,
+      4,
+    );
+    expect(cost.hourlyUSD).toBe(12);
+  });
 });
 
 function testLease(overrides: Partial<LeaseRecord>): LeaseRecord {

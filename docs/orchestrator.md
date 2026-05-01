@@ -58,12 +58,18 @@ Direct cleanup only deletes machines that are clearly safe:
 
 ## Cost Control
 
-The orchestrator estimates cost before creating a machine. It uses a provider/server-type hourly rate, multiplies it by lease TTL, and reserves that worst-case amount for the current month. This is a guardrail, not a billing export.
+The orchestrator estimates cost before creating a machine. It fetches live provider pricing when possible, multiplies the hourly rate by lease TTL, and reserves that worst-case amount for the current month. This is a guardrail, not a billing export.
 
-Rate defaults are built in for the common Hetzner and AWS classes. Override them with:
+Provider-backed pricing:
+
+- AWS: `DescribeSpotPriceHistory` for the requested instance type and region.
+- Hetzner: Cloud API server-type prices for the requested location; hourly EUR prices are converted with `CRABBOX_EUR_TO_USD`, default `1.08`.
+
+Static defaults remain as fallback values for provider API failures. Explicit overrides win over provider-fetched prices:
 
 ```text
 CRABBOX_COST_RATES_JSON='{"aws:c7a.48xlarge":9,"hetzner:ccx63":1.08}'
+CRABBOX_EUR_TO_USD=1.08
 ```
 
 Supported limits:

@@ -18,10 +18,27 @@ interface HetznerServerResponse {
   server: HetznerServer;
 }
 
+interface HetznerListServerTypesResponse {
+  server_types: HetznerServerType[];
+}
+
+interface HetznerServerType {
+  name: string;
+  prices: HetznerServerTypePrice[];
+}
+
+interface HetznerServerTypePrice {
+  location: string;
+  price_hourly: {
+    net?: string;
+    gross?: string;
+  };
+}
+
 export class HetznerClient {
   private readonly token: string;
 
-  constructor(env: Env) {
+  constructor(private readonly env: Env) {
     if (!env.HETZNER_TOKEN) {
       throw new Error("HETZNER_TOKEN secret is required");
     }
@@ -81,6 +98,22 @@ export class HetznerClient {
     if (key) {
       await this.request<void>("DELETE", `/ssh_keys/${key.id}`);
     }
+  }
+
+  async hourlyPriceUSD(name: string, location: string): Promise<number | undefined> {
+    const response = await this.request<HetznerListServerTypesResponse>(
+      "GET",
+      `/server_types?${new URLSearchParams({ per_page: "100" })}`,
+    );
+    const serverType = response.server_types.find((candidate) => candidate.name === name);
+    const price =
+      serverType?.prices.find((candidate) => candidate.location === location) ??
+      serverType?.prices[0];
+    const hourlyEUR = positiveFloat(price?.price_hourly.gross ?? price?.price_hourly.net ?? "");
+    if (hourlyEUR === undefined) {
+      return undefined;
+    }
+    return roundUSD(hourlyEUR * eurToUSD(this.env));
   }
 
   async createServerWithFallback(
@@ -225,6 +258,20 @@ function prependUnique(first: string, rest: string[]): string[] {
 
 function sanitizeLabel(value: string): string {
   return value.replaceAll(/[^a-zA-Z0-9_.@-]/g, "_").slice(0, 63) || "unknown";
+}
+
+function eurToUSD(env: Env): number {
+  const parsed = Number.parseFloat(env.CRABBOX_EUR_TO_USD ?? "");
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 1.08;
+}
+
+function positiveFloat(value: string): number | undefined {
+  const parsed = Number.parseFloat(value);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : undefined;
+}
+
+function roundUSD(value: number): number {
+  return Math.round(value * 100) / 100;
 }
 
 async function safeBody(response: Response): Promise<string> {
