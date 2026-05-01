@@ -16,11 +16,14 @@
 - Updated CLI defaults, docs, examples, and auth guidance to prefer `https://crabbox.openclaw.ai`.
 - Clarified that Cloudflare Access OAuth and Crabbox CLI OAuth are separate GitHub OAuth apps with separate callback URLs.
 - Scoped normal GitHub-login users to their own leases, run history, logs, and usage; shared-token admin auth remains required for pool and fleet-wide operator views.
-- AWS coordinator-created security groups now allow SSH only from configured CIDRs or the request source IP instead of adding world-open SSH ingress.
+- AWS coordinator-created security groups now allow SSH only from configured CIDRs, the CLI-detected outbound IPv4 CIDR, or the request source IP instead of adding world-open SSH ingress.
+- Direct AWS security groups now honor the configured AWS SSH source CIDRs when creating managed SSH ingress.
 
 ### Fixed
 
 - Cleaned up Blacksmith Testbox local lease claims and per-lease SSH keys after failed warmups, explicit stops, and one-shot runs.
+- Fixed `status` and `inspect` readiness reporting so active leases with a host are not marked ready until SSH and `crabbox-ready` actually respond.
+- Fixed remote sync sanity failures to include the remote deletion count and sample paths instead of hiding the useful stderr behind `exit status 66`.
 - Restricted Worker admin routes to shared-token admin auth so GitHub browser-login users cannot call admin endpoints.
 - Fixed `whoami` reporting for GitHub browser-login tokens.
 - Fixed exact `cbx_...` lookups bypassing owner-scoped slug authorization checks.
