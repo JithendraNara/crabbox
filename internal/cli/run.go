@@ -275,6 +275,11 @@ func (a App) acquireCoordinator(ctx context.Context, cfg Config, coord *Coordina
 	if err != nil {
 		return Server{}, SSHTarget{}, "", err
 	}
+	if lease.ID != "" && lease.ID != leaseID {
+		if err := moveStoredTestboxKey(leaseID, lease.ID); err != nil {
+			fmt.Fprintf(a.Stderr, "warning: could not move local key from %s to %s: %v\n", leaseID, lease.ID, err)
+		}
+	}
 	server, target, leaseID := leaseToServerTarget(lease, cfg)
 	fmt.Fprintf(a.Stderr, "leased %s server=%d type=%s ip=%s via coordinator\n", leaseID, server.ID, server.ServerType.Name, target.Host)
 	if err := waitForSSH(ctx, &target, a.Stderr); err != nil {

@@ -3,6 +3,7 @@ package cli
 import (
 	"crypto/rand"
 	"encoding/hex"
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -67,6 +68,35 @@ func useStoredTestboxKey(target *SSHTarget, leaseID string) {
 	if _, err := os.Stat(keyPath); err == nil {
 		target.Key = keyPath
 	}
+}
+
+func moveStoredTestboxKey(oldLeaseID, newLeaseID string) error {
+	if oldLeaseID == "" || newLeaseID == "" || oldLeaseID == newLeaseID {
+		return nil
+	}
+	oldPath, err := testboxKeyPath(oldLeaseID)
+	if err != nil {
+		return err
+	}
+	newPath, err := testboxKeyPath(newLeaseID)
+	if err != nil {
+		return err
+	}
+	oldDir := filepath.Dir(oldPath)
+	newDir := filepath.Dir(newPath)
+	if _, err := os.Stat(oldPath); err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return nil
+		}
+		return err
+	}
+	if _, err := os.Stat(newPath); err == nil {
+		return nil
+	}
+	if err := os.MkdirAll(filepath.Dir(newDir), 0o700); err != nil {
+		return err
+	}
+	return os.Rename(oldDir, newDir)
 }
 
 func providerKeyForLease(leaseID string) string {

@@ -29,3 +29,5 @@ Initial Crabbox release.
 - Top-level help is now workflow-first, with common flows, grouped commands, config pointers, environment variables, and aliases.
 - `--idle-timeout` is documented as the preferred agent-facing name for lease TTL.
 - `doctor` accepts per-lease SSH keys as the default posture and validates explicit `CRABBOX_SSH_KEY` only when set.
+- Coordinator requests bound dial/TLS timeouts and fall back to local `curl` on transport failures.
+- Local per-lease SSH keys move with coordinator-renamed lease IDs.

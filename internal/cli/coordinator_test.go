@@ -2,6 +2,8 @@ package cli
 
 import (
 	"encoding/json"
+	"os"
+	"strings"
 	"testing"
 )
 
@@ -20,4 +22,59 @@ func TestCoordinatorMachineIDAcceptsStringOrNumber(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestSplitCurlResponseParsesTrailingStatus(t *testing.T) {
+	body, status, err := splitCurlResponse([]byte("{\"ok\":true}\n200"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if status != 200 {
+		t.Fatalf("status = %d, want 200", status)
+	}
+	if string(body) != `{"ok":true}` {
+		t.Fatalf("body = %q", body)
+	}
+}
+
+func TestCurlConfigKeepsBearerTokenInConfig(t *testing.T) {
+	client := CoordinatorClient{BaseURL: "https://example.test", Token: "secret-token"}
+	config, cleanup, err := client.curlConfig("POST", "/v1/leases", []byte(`{"leaseID":"cbx"}`), true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer cleanup()
+
+	for _, want := range []string{
+		`url = "https://example.test/v1/leases"`,
+		`request = "POST"`,
+		`header = "Authorization: Bearer secret-token"`,
+		`header = "Content-Type: application/json"`,
+		`data-binary = "@`,
+	} {
+		if !strings.Contains(config, want) {
+			t.Fatalf("config missing %q:\n%s", want, config)
+		}
+	}
+	bodyPath := curlConfigValueForTest(t, config, "data-binary")
+	bodyPath = strings.TrimPrefix(bodyPath, "@")
+	if _, err := os.Stat(bodyPath); err != nil {
+		t.Fatalf("body file missing: %v", err)
+	}
+}
+
+func curlConfigValueForTest(t *testing.T, config, key string) string {
+	t.Helper()
+	prefix := key + " = "
+	for _, line := range strings.Split(config, "\n") {
+		if strings.HasPrefix(line, prefix) {
+			var value string
+			if err := json.Unmarshal([]byte(strings.TrimPrefix(line, prefix)), &value); err != nil {
+				t.Fatal(err)
+			}
+			return value
+		}
+	}
+	t.Fatalf("config key %q missing:\n%s", key, config)
+	return ""
 }

@@ -3,6 +3,8 @@ package cli
 import (
 	"bytes"
 	"context"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -120,6 +122,38 @@ func TestServerProviderKeyUsesOnlyCrabboxLeaseKeys(t *testing.T) {
 	}
 	if validCrabboxProviderKey("crabbox-steipete") {
 		t.Fatal("shared key must not be treated as per-lease cleanup key")
+	}
+}
+
+func TestMoveStoredTestboxKeyHandlesCoordinatorRenamedLease(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
+	oldPath, err := testboxKeyPath("cbx_111111111111")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Dir(oldPath), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(oldPath, []byte("key"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(oldPath+".pub", []byte("pub"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := moveStoredTestboxKey("cbx_111111111111", "cbx_222222222222"); err != nil {
+		t.Fatal(err)
+	}
+	newPath, err := testboxKeyPath("cbx_222222222222")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(newPath); err != nil {
+		t.Fatalf("moved key missing: %v", err)
+	}
+	if _, err := os.Stat(oldPath); !os.IsNotExist(err) {
+		t.Fatalf("old key still exists or unexpected stat error: %v", err)
 	}
 }
 

@@ -4,12 +4,15 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
 	"os/exec"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -119,7 +122,19 @@ func newCoordinatorClient(cfg Config) (*CoordinatorClient, bool, error) {
 	return &CoordinatorClient{
 		BaseURL: strings.TrimRight(base.String(), "/"),
 		Token:   cfg.CoordToken,
-		Client:  &http.Client{Timeout: 5 * time.Minute},
+		Client: &http.Client{
+			Timeout: 5 * time.Minute,
+			Transport: &http.Transport{
+				Proxy: http.ProxyFromEnvironment,
+				DialContext: (&net.Dialer{
+					Timeout:   5 * time.Second,
+					KeepAlive: 30 * time.Second,
+				}).DialContext,
+				TLSHandshakeTimeout:   10 * time.Second,
+				ResponseHeaderTimeout: 5 * time.Minute,
+				IdleConnTimeout:       90 * time.Second,
+			},
+		},
 	}, true, nil
 }
 
@@ -217,21 +232,31 @@ func (c *CoordinatorClient) Health(ctx context.Context) error {
 }
 
 func (c *CoordinatorClient) do(ctx context.Context, method, path string, body any, out any) error {
-	var r *bytes.Reader
+	var data []byte
+	var err error
 	if body != nil {
-		data, err := json.Marshal(body)
+		data, err = json.Marshal(body)
 		if err != nil {
 			return err
 		}
-		r = bytes.NewReader(data)
-	} else {
-		r = bytes.NewReader(nil)
 	}
-	req, err := http.NewRequestWithContext(ctx, method, c.BaseURL+path, r)
+	err = c.doHTTP(ctx, method, path, data, body != nil, out)
+	if err == nil || !isCoordinatorTransportError(err) {
+		return err
+	}
+	if curlErr := c.doCurl(ctx, method, path, data, body != nil, out); curlErr == nil {
+		return nil
+	} else {
+		return fmt.Errorf("%w; curl fallback failed: %v", err, curlErr)
+	}
+}
+
+func (c *CoordinatorClient) doHTTP(ctx context.Context, method, path string, data []byte, hasBody bool, out any) error {
+	req, err := http.NewRequestWithContext(ctx, method, c.BaseURL+path, bytes.NewReader(data))
 	if err != nil {
 		return err
 	}
-	if body != nil {
+	if hasBody {
 		req.Header.Set("Content-Type", "application/json")
 	}
 	if c.Token != "" {
@@ -248,20 +273,125 @@ func (c *CoordinatorClient) do(ctx context.Context, method, path string, body an
 		return err
 	}
 	defer resp.Body.Close()
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		data, _ := io.ReadAll(io.LimitReader(resp.Body, 600))
+	return decodeCoordinatorResponse(method, path, resp.StatusCode, resp.Body, out)
+}
+
+func (c *CoordinatorClient) doCurl(ctx context.Context, method, path string, data []byte, hasBody bool, out any) error {
+	config, cleanup, err := c.curlConfig(method, path, data, hasBody)
+	if err != nil {
+		return err
+	}
+	defer cleanup()
+
+	cmd := exec.CommandContext(ctx, "curl", "--config", "-")
+	cmd.Stdin = strings.NewReader(config)
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+	if err := cmd.Run(); err != nil {
+		msg := strings.TrimSpace(stderr.String())
+		if msg != "" {
+			return fmt.Errorf("%v: %s", err, msg)
+		}
+		return err
+	}
+	body, status, err := splitCurlResponse(stdout.Bytes())
+	if err != nil {
+		return err
+	}
+	return decodeCoordinatorResponse(method, path, status, bytes.NewReader(body), out)
+}
+
+func (c *CoordinatorClient) curlConfig(method, path string, data []byte, hasBody bool) (string, func(), error) {
+	var bodyPath string
+	cleanup := func() {}
+	if hasBody {
+		file, err := os.CreateTemp("", "crabbox-curl-body-*")
+		if err != nil {
+			return "", cleanup, err
+		}
+		bodyPath = file.Name()
+		cleanup = func() { _ = os.Remove(bodyPath) }
+		if _, err := file.Write(data); err != nil {
+			_ = file.Close()
+			cleanup()
+			return "", func() {}, err
+		}
+		if err := file.Close(); err != nil {
+			cleanup()
+			return "", func() {}, err
+		}
+	}
+
+	var cfg strings.Builder
+	curlConfigValue(&cfg, "url", c.BaseURL+path)
+	curlConfigValue(&cfg, "request", method)
+	curlConfigValue(&cfg, "connect-timeout", "10")
+	curlConfigValue(&cfg, "max-time", "300")
+	curlConfigFlag(&cfg, "silent")
+	curlConfigFlag(&cfg, "show-error")
+	curlConfigFlag(&cfg, "location")
+	curlConfigValue(&cfg, "output", "-")
+	curlConfigValue(&cfg, "write-out", "\n%{http_code}")
+	if hasBody {
+		curlConfigValue(&cfg, "header", "Content-Type: application/json")
+		curlConfigValue(&cfg, "data-binary", "@"+bodyPath)
+	}
+	if c.Token != "" {
+		curlConfigValue(&cfg, "header", "Authorization: Bearer "+c.Token)
+	}
+	if owner := localCoordinatorOwner(); owner != "" {
+		curlConfigValue(&cfg, "header", "X-Crabbox-Owner: "+owner)
+	}
+	if org := os.Getenv("CRABBOX_ORG"); org != "" {
+		curlConfigValue(&cfg, "header", "X-Crabbox-Org: "+org)
+	}
+	return cfg.String(), cleanup, nil
+}
+
+func curlConfigValue(out *strings.Builder, key, value string) {
+	fmt.Fprintf(out, "%s = %s\n", key, strconv.Quote(value))
+}
+
+func curlConfigFlag(out *strings.Builder, key string) {
+	fmt.Fprintln(out, key)
+}
+
+func splitCurlResponse(data []byte) ([]byte, int, error) {
+	idx := bytes.LastIndexByte(data, '\n')
+	if idx < 0 || idx+1 >= len(data) {
+		return nil, 0, fmt.Errorf("curl response missing status")
+	}
+	status, err := strconv.Atoi(strings.TrimSpace(string(data[idx+1:])))
+	if err != nil {
+		return nil, 0, fmt.Errorf("curl response invalid status: %w", err)
+	}
+	return data[:idx], status, nil
+}
+
+func decodeCoordinatorResponse(method, path string, statusCode int, body io.Reader, out any) error {
+	if statusCode < 200 || statusCode >= 300 {
+		data, _ := io.ReadAll(io.LimitReader(body, 600))
 		msg := strings.TrimSpace(string(data))
 		if msg != "" {
-			return fmt.Errorf("coordinator %s %s: http %d: %s", method, path, resp.StatusCode, msg)
+			return fmt.Errorf("coordinator %s %s: http %d: %s", method, path, statusCode, msg)
 		}
-		return fmt.Errorf("coordinator %s %s: http %d", method, path, resp.StatusCode)
+		return fmt.Errorf("coordinator %s %s: http %d", method, path, statusCode)
 	}
 	if out != nil {
-		if err := json.NewDecoder(resp.Body).Decode(out); err != nil {
+		if err := json.NewDecoder(body).Decode(out); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+func isCoordinatorTransportError(err error) bool {
+	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return false
+	}
+	var urlErr *url.Error
+	return errors.As(err, &urlErr)
 }
 
 func localCoordinatorOwner() string {
