@@ -6,90 +6,58 @@ Read when:
 - you want the end-to-end mental model;
 - you need to know which component owns a behavior before changing code.
 
-Crabbox is a remote testbox system. The local CLI keeps the developer workflow simple: lease a machine, sync the dirty checkout, run a command, stream output, and clean up. The Cloudflare broker keeps shared capacity safe: it owns provider credentials, lease state, cleanup, usage, and cost guardrails.
+## TL;DR
+
+Crabbox is a remote testbox system. Two sides cooperate:
+
+- The **CLI** keeps the developer story simple: lease a machine, sync the dirty checkout, run a command, stream output, clean up.
+- The **broker** (a Cloudflare Worker plus one Durable Object) keeps shared capacity safe: it owns provider credentials, lease state, expiry, cleanup, usage, and cost guardrails.
+
+Cloud machines are vanilla Ubuntu runners that hold no broker secrets. They are leaves: provisioned, used, deleted.
 
 ## The Pieces
 
 ```text
-local machine
-  crabbox CLI
-  repo checkout
-  per-lease SSH key
-    |
-    | HTTPS JSON API
-    v
-Cloudflare Worker
-  Fleet Durable Object
-  provider credentials
-  lease and usage state
-    |
-    | provider API
-    v
-Hetzner Cloud or AWS EC2 Spot
-  Ubuntu runner
-  SSH on port 2222
-  /work/crabbox/<lease>/<repo>
-
-local machine
-    |
-    | SSH + rsync
-    v
-runner
++----------------------+    HTTPS / JSON     +--------------------------+
+| your laptop          |  ------------------> | Cloudflare Worker        |
+| -------------        |   bearer + owner     | ------------------       |
+| crabbox CLI          |                      | Fleet Durable Object     |
+| repo checkout        |                      | provider creds           |
+| per-lease SSH key    |                      | lease + usage state      |
++----------+-----------+                      +------------+-------------+
+           |                                                | provider API
+           |                                                v
+           |                                +------------------------------+
+           |       SSH (port 2222) +        | Hetzner Cloud / AWS Spot     |
+           +----------- rsync ------------> | Ubuntu runner                |
+                                            | /work/crabbox/<lease>/<repo> |
+                                            +------------------------------+
 ```
 
-The CLI talks to the broker over HTTPS, then talks directly to the leased runner over SSH and rsync. The runner does not need broker credentials.
+The CLI talks to the broker over HTTPS, then talks **directly** to the leased runner over SSH and rsync. The runner never calls the broker; that path stays one-way.
 
 ## Ownership
 
-CLI owns:
+| Layer       | Owns                                                                                                                                                            |
+|:------------|:----------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| **CLI** | config + flags; per-lease SSH key; SSH readiness; Git seeding + rsync; sync fingerprints + sanity checks; remote command + streaming; heartbeats; release |
+| **Broker** | request auth + identity; serialized lease state; provider credentials; machine create/delete; lease expiry; pool/status/inspect; usage; spend caps |
+| **Provider** | raw compute: Hetzner Cloud servers or AWS EC2 Spot instances |
+| **Runner** | nothing durable: Ubuntu prepared by cloud-init with SSH, Node 24, pnpm, Docker, Git, rsync, build tools, `/work/crabbox` |
 
-- config loading and command flags;
-- per-lease SSH key creation and local key lookup;
-- SSH readiness waits;
-- Git seeding and rsync;
-- sync fingerprints and sanity checks;
-- remote command execution;
-- stdout/stderr streaming;
-- heartbeat and release calls while it is alive.
+## What `crabbox run` does
 
-Broker owns:
+A single `crabbox run` command walks through five phases:
 
-- authentication and owner/org attribution;
-- serialized lease state in the Fleet Durable Object;
-- provider credentials;
-- machine creation and deletion;
-- lease expiry;
-- pool, status, and inspect data;
-- usage statistics;
-- active lease and monthly spend guardrails.
+**1. Plan.** Load config (flags -> env -> repo -> user -> defaults). Mint a temporary lease ID and per-lease SSH key.
 
-Provider owns raw compute. Today that means Hetzner Cloud servers or AWS EC2 Spot instances.
+**2. Lease.** `POST /v1/leases` to the broker with class, provider, TTL, bootstrap options, and the SSH public key. Worker authenticates, then forwards to the Fleet Durable Object. Durable Object enforces active-lease and monthly spend caps, asks the provider for live pricing, reserves the worst-case TTL cost, provisions the machine, and returns host / SSH user / port / work root / expiry / lease ID. CLI re-keys its local key dir if the broker assigned a different final lease ID.
 
-Runner owns nothing durable. It is an Ubuntu machine prepared by cloud-init with SSH, Node 24, pnpm, Docker, Git, rsync, build tools, and `/work/crabbox`.
+**3. Sync.** Wait for SSH and the `crabbox-ready` marker. Seed remote Git when possible. Compare local and remote sync fingerprints; skip rsync if nothing changed. Otherwise rsync the dirty checkout into `/work/crabbox/<lease>/<repo>`, run sanity checks, hydrate the configured base ref.
 
-## What Happens On `crabbox run`
+**4. Run.** Start heartbeats in the background. Run the requested command over SSH and stream stdout/stderr.
 
-1. CLI loads config from flags, env, repo config, user config, and defaults.
-2. CLI creates a temporary lease ID and a per-lease SSH key.
-3. CLI sends `POST /v1/leases` to the broker with class, provider, TTL, bootstrap options, and the SSH public key.
-4. Worker authenticates the request and forwards it to the Fleet Durable Object.
-5. Durable Object checks active-lease limits and monthly reserved spend limits.
-6. Worker asks the provider for live pricing when available, unless explicit cost rates are configured.
-7. Durable Object reserves the worst-case TTL cost for the month.
-8. Worker provisions a Hetzner server or AWS EC2 Spot instance.
-9. Worker stores the lease and returns host, SSH user, port, work root, expiry, and lease ID.
-10. CLI moves the local key directory if the broker returned a final lease ID different from the provisional one.
-11. CLI waits for SSH and `crabbox-ready`.
-12. CLI seeds remote Git when possible.
-13. CLI compares sync fingerprints and skips rsync when nothing changed.
-14. CLI rsyncs the dirty checkout into `/work/crabbox/<lease>/<repo>`.
-15. CLI runs sync sanity checks and hydrates the configured base ref.
-16. CLI starts heartbeats in the background.
-17. CLI runs the command over SSH and streams output.
-18. CLI releases the lease unless `--keep` is set.
-19. Broker deletes the non-kept machine and provider-side lease keys.
-
-If bootstrap never reaches SSH readiness for a fresh non-kept lease, `crabbox run` can retry once with a new machine. It does not duplicate commands on kept or explicitly reused leases.
+**5. Release.** Release the lease unless `--keep` is set. The broker terminates the runner and frees provider-side state. If bootstrap never reached SSH readiness on a fresh non-kept lease, `crabbox run` retries once with a new machine; it never duplicates commands on kept or explicitly reused leases.
 
 ## Warm Machines And Reuse
 
@@ -102,33 +70,31 @@ crabbox ssh --id cbx_...
 crabbox stop cbx_...
 ```
 
-Heartbeats extend brokered leases while the CLI is using them. If a lease goes stale, the Durable Object alarm expires it and deletes non-kept resources.
+While the CLI is using a lease it sends heartbeats; the Durable Object extends the lease accordingly. If a lease goes stale, the alarm expires it and deletes non-kept resources.
 
-## Brokered Path vs Direct Provider Path
+## Brokered vs Direct Provider
 
-Brokered path is normal operation:
+The **brokered path** is normal operation:
 
 ```text
 CLI -> Cloudflare Worker -> Durable Object -> provider API
 CLI -> runner over SSH/rsync
 ```
 
-Use it when maintainers or agents share infrastructure. It keeps provider secrets out of local machines and gives centralized cleanup, usage, and cost control.
+Use it when maintainers or agents share infrastructure. Provider secrets stay off local machines; cleanup, usage, and cost control all flow through the broker.
 
-Direct provider path is a debug fallback:
+The **direct path** is a debug fallback:
 
 ```text
 CLI -> provider API
 CLI -> runner over SSH/rsync
 ```
 
-It needs local provider credentials such as AWS credentials or `HCLOUD_TOKEN`. Direct mode has no central usage history and no brokered heartbeat.
+Direct mode needs local provider credentials (AWS SDK chain or `HCLOUD_TOKEN`). It has no central usage history and no brokered heartbeat. It is handy for diagnosing the broker itself, not for day-to-day work.
 
 ## Auth And Identity
 
-The broker accepts bearer-token automation and can also use Cloudflare Access identity when present.
-
-Bearer-token CLI requests send:
+The broker accepts bearer-token automation and can also use Cloudflare Access identity when present. Bearer-token CLI requests send:
 
 ```text
 Authorization: Bearer <token>
@@ -136,61 +102,49 @@ X-Crabbox-Owner: <email>
 X-Crabbox-Org: <org>
 ```
 
-Owner comes from `CRABBOX_OWNER`, Git email env, or `git config user.email`. `CRABBOX_ORG` sets the org. Cloudflare Access email wins when available.
+Owner is resolved from `CRABBOX_OWNER`, the Git email env, or `git config user.email`. `CRABBOX_ORG` sets the org. Cloudflare Access email wins when both are present.
 
 ## Sync Model
 
-Crabbox sync is intentionally local-first. It does not require a clean checkout.
-
-The sync layer:
+Crabbox sync is intentionally local-first: it does not require a clean checkout. The sync layer:
 
 - seeds remote Git from the configured origin/base ref when possible;
-- overlays local dirty files with rsync;
-- can use checksum mode;
-- can skip no-op syncs with fingerprints;
-- excludes heavy project directories from repo config;
-- checks for suspicious mass tracked deletions;
+- overlays local dirty files with rsync (with a checksum mode for reliability);
+- skips no-op syncs via fingerprints;
+- excludes heavy directories from repo config;
+- guards against suspicious mass tracked deletions;
 - hydrates base-ref history for changed-test workflows.
 
-This gives agents and maintainers the same local loop: edit locally, run remotely.
+Same loop for agents and humans: edit locally, run remotely.
 
 ## Cost And Usage
 
-The broker tracks two costs:
+The broker tracks two cost numbers per lease:
 
 ```text
-estimatedUSD   elapsed runtime cost
+estimatedUSD   elapsed runtime cost so far
 reservedUSD    worst-case TTL cost reserved before provisioning
 ```
 
 Hourly price source order:
 
 ```text
-1. CRABBOX_COST_RATES_JSON explicit override
-2. provider live pricing
-3. built-in fallback rates
+1. CRABBOX_COST_RATES_JSON  explicit override
+2. provider live pricing    EC2 Spot history / Hetzner server-type prices
+3. built-in fallback rates  last-resort defaults
 ```
 
-AWS pricing comes from EC2 Spot price history. Hetzner pricing comes from server-type hourly prices and is converted with `CRABBOX_EUR_TO_USD`.
-
-`crabbox usage` queries `GET /v1/usage` and can group by user, org, provider, and server type.
+Hetzner pricing converts via `CRABBOX_EUR_TO_USD`. `crabbox usage` queries `GET /v1/usage` and groups by user, org, provider, and server type.
 
 ## Failure And Cleanup
 
-Crabbox assumes failures are normal:
-
-- CLI can crash;
-- SSH can disconnect;
-- cloud-init can fail;
-- provider calls can partially succeed;
-- Cloudflare can retry requests;
-- machines can outlive the local process.
+Crabbox assumes failures are normal: CLIs crash, SSH disconnects, cloud-init fails, provider calls partially succeed, Cloudflare retries, machines outlive local processes.
 
 The design response:
 
 - one Durable Object serializes fleet decisions;
 - lease creation is idempotent where practical;
-- provider resources are tagged/labeled;
+- provider resources carry Crabbox tags/labels;
 - release is safe to call repeatedly;
 - stale leases expire by alarm;
 - direct cleanup is conservative;

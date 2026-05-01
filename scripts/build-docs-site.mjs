@@ -104,8 +104,11 @@ function markdownToHtml(markdown, currentRel) {
     html.push(`</${list}>`);
     list = null;
   };
+  const splitRow = (line) => line.replace(/^\s*\|/, "").replace(/\|\s*$/, "").split("|").map((s) => s.trim());
+  const isDivider = (line) => /^\s*\|?\s*:?-{2,}:?\s*(\|\s*:?-{2,}:?\s*)+\|?\s*$/.test(line);
 
-  for (const line of lines) {
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
     const fenceMatch = line.match(/^```(\w+)?\s*$/);
     if (fenceMatch) {
       flushParagraph();
@@ -140,6 +143,26 @@ function markdownToHtml(markdown, currentRel) {
       } else {
         html.push(`<h${level} id="${id}"><a class="anchor" href="#${id}" aria-label="Anchor link">#</a>${inner}</h${level}>`);
       }
+      continue;
+    }
+    if (line.trimStart().startsWith("|") && line.includes("|", line.indexOf("|") + 1) && isDivider(lines[i + 1] || "")) {
+      flushParagraph();
+      closeList();
+      const header = splitRow(line);
+      const aligns = splitRow(lines[i + 1]).map((cell) => {
+        const left = cell.startsWith(":");
+        const right = cell.endsWith(":");
+        return right && left ? "center" : right ? "right" : left ? "left" : "";
+      });
+      i += 1;
+      const rows = [];
+      while (i + 1 < lines.length && lines[i + 1].trimStart().startsWith("|")) {
+        i += 1;
+        rows.push(splitRow(lines[i]));
+      }
+      const th = header.map((c, idx) => `<th${aligns[idx] ? ` style="text-align:${aligns[idx]}"` : ""}>${inline(c, currentRel)}</th>`).join("");
+      const tb = rows.map((r) => `<tr>${r.map((c, idx) => `<td${aligns[idx] ? ` style="text-align:${aligns[idx]}"` : ""}>${inline(c, currentRel)}</td>`).join("")}</tr>`).join("");
+      html.push(`<table><thead><tr>${th}</tr></thead><tbody>${tb}</tbody></table>`);
       continue;
     }
     const bullet = line.match(/^\s*-\s+(.+)$/);
@@ -343,7 +366,7 @@ nav h2{font-size:.68rem;color:var(--muted);text-transform:uppercase;letter-spaci
 .nav-link.active{background:#efe2d0;color:#0e423c;border-left-color:var(--coral);font-weight:600}
 
 /* main */
-main{min-width:0;padding:28px clamp(20px,4.5vw,60px) 72px}
+main{min-width:0;padding:28px clamp(20px,4.5vw,60px) 72px;max-width:1180px;margin:0 auto;width:100%}
 .hero{display:flex;align-items:flex-end;justify-content:space-between;gap:22px;border-bottom:1px solid var(--line);padding:18px 0 22px;position:relative;flex-wrap:wrap}
 .hero:after{content:"";position:absolute;left:0;bottom:-1px;width:88px;height:3px;background:linear-gradient(90deg,var(--coral),var(--ochre),var(--tide));border-radius:3px}
 .hero-text{min-width:0;flex:1 1 320px}
@@ -383,10 +406,11 @@ main{min-width:0;padding:28px clamp(20px,4.5vw,60px) 72px}
 /* layout: doc + toc */
 .doc-grid{display:grid;grid-template-columns:minmax(0,1fr);gap:36px;margin-top:30px}
 .doc-grid-home{margin-top:14px}
-.doc-home{background:transparent;box-shadow:none;border:0;padding:8px 0 0}
+.doc-home{background:transparent;box-shadow:none;border:0;padding:8px 0 0;max-width:74ch;margin-inline:auto;width:100%}
 .doc-home>:first-child{margin-top:0}
-@media(min-width:1180px){.doc-grid{grid-template-columns:minmax(0,1fr) 200px}.doc-grid-home{grid-template-columns:minmax(0,1fr)}}
-.doc{min-width:0;background:rgba(255,251,244,.78);box-shadow:var(--shadow);border:1px solid var(--line-soft);border-radius:10px;padding:clamp(22px,3.6vw,44px);overflow-wrap:break-word}
+@media(min-width:1180px){.doc-grid{grid-template-columns:minmax(0,74ch) 200px;justify-content:start}.doc-grid-home{grid-template-columns:minmax(0,1fr)}}
+.doc{min-width:0;max-width:74ch;background:rgba(255,251,244,.78);box-shadow:var(--shadow);border:1px solid var(--line-soft);border-radius:10px;padding:clamp(22px,3.6vw,44px);overflow-wrap:break-word}
+.doc-home{max-width:none}
 .doc h1{display:none}
 .doc h2{font-family:Fraunces,Georgia,serif;font-size:1.65rem;line-height:1.15;margin:1.9em 0 .5em;font-weight:600;letter-spacing:-.005em;position:relative}
 .doc h3{font-size:1.12rem;margin:1.6em 0 .3em;position:relative;font-weight:600}
