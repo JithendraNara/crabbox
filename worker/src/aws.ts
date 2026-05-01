@@ -151,6 +151,7 @@ export class EC2SpotClient {
     imageID: string,
     securityGroupID: string,
   ): Promise<ProviderMachine> {
+    const now = new Date();
     const name = `crabbox-${leaseID}`.replaceAll("_", "-");
     const labels = {
       class: config.class,
@@ -163,6 +164,8 @@ export class EC2SpotClient {
       provider: "aws",
       server_type: config.serverType,
       state: "leased",
+      created_at: now.toISOString(),
+      expires_at: new Date(now.getTime() + config.ttlSeconds * 1000).toISOString(),
     };
     const rootGB = config.awsRootGB || positiveInt(this.env.CRABBOX_AWS_ROOT_GB) || 400;
     const instanceProfile = config.awsProfile || this.env.CRABBOX_AWS_INSTANCE_PROFILE || "";

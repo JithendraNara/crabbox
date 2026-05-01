@@ -53,6 +53,7 @@ export interface LeaseRecord {
   sshPort: string;
   workRoot: string;
   keep: boolean;
+  ttlSeconds: number;
   state: "active" | "released" | "expired" | "failed";
   createdAt: string;
   updatedAt: string;

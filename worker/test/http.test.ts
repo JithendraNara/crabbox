@@ -3,9 +3,9 @@ import { describe, expect, it } from "vitest";
 import { isAuthorized } from "../src";
 
 describe("coordinator auth", () => {
-  it("allows requests when no shared token is configured", () => {
+  it("denies requests when no shared token is configured", () => {
     const request = new Request("https://example.test/v1/pool");
-    expect(isAuthorized(request, {})).toBe(true);
+    expect(isAuthorized(request, {})).toBe(false);
   });
 
   it("requires the configured bearer token", () => {

@@ -154,6 +154,7 @@ func (c *HetznerClient) EnsureSSHKey(ctx context.Context, name, publicKey string
 
 func (c *HetznerClient) CreateServer(ctx context.Context, cfg Config, publicKey, leaseID string, keep bool) (Server, error) {
 	name := strings.ReplaceAll("crabbox-"+leaseID, "_", "-")
+	now := time.Now().UTC()
 	labels := map[string]string{
 		"crabbox":     "true",
 		"profile":     cfg.Profile,
@@ -163,6 +164,8 @@ func (c *HetznerClient) CreateServer(ctx context.Context, cfg Config, publicKey,
 		"state":       "leased",
 		"keep":        fmt.Sprint(keep),
 		"created_by":  "crabbox",
+		"created_at":  now.Format(time.RFC3339),
+		"expires_at":  now.Add(cfg.TTL).Format(time.RFC3339),
 	}
 	body := map[string]any{
 		"name":               name,

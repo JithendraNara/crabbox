@@ -115,6 +115,7 @@ func (c *AWSClient) CreateServerWithFallback(ctx context.Context, cfg Config, pu
 func (c *AWSClient) createServer(ctx context.Context, cfg Config, publicKey, leaseID string, keep bool, imageID, securityGroupID string) (Server, error) {
 	_ = publicKey
 	name := strings.ReplaceAll("crabbox-"+leaseID, "_", "-")
+	now := time.Now().UTC()
 	labels := map[string]string{
 		"class":       cfg.Class,
 		"crabbox":     "true",
@@ -125,6 +126,8 @@ func (c *AWSClient) createServer(ctx context.Context, cfg Config, publicKey, lea
 		"provider":    "aws",
 		"server_type": cfg.ServerType,
 		"state":       "leased",
+		"created_at":  now.Format(time.RFC3339),
+		"expires_at":  now.Add(cfg.TTL).Format(time.RFC3339),
 	}
 	userData := base64.StdEncoding.EncodeToString([]byte(cloudInit(cfg, publicKey)))
 	rootGB := cfg.AWSRootGB

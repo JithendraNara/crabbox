@@ -22,6 +22,7 @@ MVP:
 - Coordinator validates `Cf-Access-Jwt-Assertion`.
 - Coordinator maps Access identity to lease owner.
 - Workers.dev automation currently uses a shared bearer token while `crabbox login` and Access service-token support are completed.
+- Missing shared-token config fails closed for non-health coordinator routes.
 
 Target:
 
@@ -100,10 +101,10 @@ Required:
 - Heartbeat deadline.
 - Explicit release.
 - Durable Object alarm cleanup.
-- Provider label sweep for orphan machines.
+- Provider label sweep for clearly expired, inactive orphan machines.
 - Boot-time cleanup of stale `/work/crabbox/*` dirs.
 
-Direct-CLI cleanup currently uses Hetzner labels and local lease metadata. Shared coordinator cleanup remains required before this is exposed beyond trusted local maintainers.
+Direct-CLI cleanup currently uses provider labels and skips active states. When a coordinator is configured, provider-side cleanup is disabled because the Durable Object TTL alarm owns brokered cleanup.
 
 Release must be idempotent. Delete must tolerate already-deleted provider resources.
 

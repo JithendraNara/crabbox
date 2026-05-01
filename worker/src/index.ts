@@ -21,7 +21,7 @@ export default {
 export function isAuthorized(request: Request, env: Pick<Env, "CRABBOX_SHARED_TOKEN">): boolean {
   const expected = env.CRABBOX_SHARED_TOKEN;
   if (!expected) {
-    return true;
+    return false;
   }
   return bearerToken(request) === expected;
 }

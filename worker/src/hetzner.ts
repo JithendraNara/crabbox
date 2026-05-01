@@ -140,6 +140,7 @@ export class HetznerClient {
     leaseID: string,
     owner: string,
   ): Promise<HetznerServer> {
+    const now = new Date();
     const name = `crabbox-${leaseID}`.replaceAll("_", "-");
     const labels = {
       crabbox: "true",
@@ -151,6 +152,8 @@ export class HetznerClient {
       keep: String(config.keep),
       owner: sanitizeLabel(owner),
       created_by: "crabbox",
+      created_at: now.toISOString(),
+      expires_at: new Date(now.getTime() + config.ttlSeconds * 1000).toISOString(),
     };
     const response = await this.request<HetznerServerResponse>("POST", "/servers", {
       name,

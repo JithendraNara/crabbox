@@ -65,6 +65,7 @@ export class FleetDurableObject implements DurableObject {
       sshPort: config.sshPort,
       workRoot: config.workRoot,
       keep: config.keep,
+      ttlSeconds: config.ttlSeconds,
       state: "active",
       createdAt: now.toISOString(),
       updatedAt: now.toISOString(),
@@ -86,8 +87,11 @@ export class FleetDurableObject implements DurableObject {
     }
     if (method === "POST" && action === "heartbeat") {
       const lease = await this.requireLease(leaseID);
-      lease.updatedAt = new Date().toISOString();
+      const now = new Date();
+      lease.updatedAt = now.toISOString();
+      lease.expiresAt = new Date(now.getTime() + leaseTTLSeconds(lease) * 1000).toISOString();
       await this.putLease(lease);
+      await this.scheduleAlarm();
       return json({ lease });
     }
     if (method === "POST" && action === "release") {
@@ -202,6 +206,18 @@ function newLeaseID(): string {
   const bytes = new Uint8Array(6);
   crypto.getRandomValues(bytes);
   return `cbx_${[...bytes].map((byte) => byte.toString(16).padStart(2, "0")).join("")}`;
+}
+
+function leaseTTLSeconds(lease: LeaseRecord): number {
+  if (Number.isFinite(lease.ttlSeconds) && lease.ttlSeconds > 0) {
+    return lease.ttlSeconds;
+  }
+  const createdAt = Date.parse(lease.createdAt);
+  const expiresAt = Date.parse(lease.expiresAt);
+  if (Number.isFinite(createdAt) && Number.isFinite(expiresAt) && expiresAt > createdAt) {
+    return Math.min(Math.trunc((expiresAt - createdAt) / 1000), 86_400);
+  }
+  return 5_400;
 }
 
 async function optionalJson<T>(request: Request): Promise<T> {

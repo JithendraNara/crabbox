@@ -17,16 +17,6 @@ Global flags:
 ```text
 -h, --help
 --version
---config <path>
---fleet-config <path-or-url>
---profile <name>
---coordinator <url>
---json
---plain
--q, --quiet
--v, --verbose
---no-color
---no-input
 ```
 
 Primary output goes to stdout. Progress, diagnostics, and errors go to stderr. JSON output is stable enough for scripts.
@@ -34,21 +24,14 @@ Primary output goes to stdout. Progress, diagnostics, and errors go to stderr. J
 ## Commands
 
 ```text
-crabbox login
 crabbox doctor
 crabbox config show [--json]
 crabbox config path
 crabbox config set-broker --url <url> --token-stdin [--provider hetzner|aws]
-crabbox profiles list
 crabbox pool list
 crabbox warmup [--provider hetzner|aws] [--profile <name>] [--ttl <duration>]
 crabbox run [--provider hetzner|aws] [--profile <name>] [--ttl <duration>] [--class <name>] -- <command...>
-crabbox shell [--id <lease-id>]
-crabbox sync [--id <lease-id>]
-crabbox download --id <lease-id> <remote-path> <local-path>
 crabbox stop <lease-id>
-crabbox machine list
-crabbox machine drain <machine-id>
 crabbox machine cleanup [--dry-run]
 ```
 
@@ -71,7 +54,6 @@ Warm a box, then reuse it:
 ```sh
 crabbox warmup --profile openclaw-check --ttl 90m
 crabbox run --id cbx_123 -- pnpm test:changed
-crabbox shell --id cbx_123
 crabbox stop cbx_123
 ```
 
@@ -81,6 +63,15 @@ Inspect pool:
 crabbox pool list
 crabbox pool list --json
 ```
+
+Cleanup direct-provider leftovers:
+
+```sh
+crabbox machine cleanup --dry-run
+crabbox machine cleanup
+```
+
+Cleanup is intentionally conservative: it skips kept machines and active states. When a coordinator is configured, brokered cleanup is owned by the Durable Object TTL alarm instead of provider-side sweeping.
 
 Debug config:
 
@@ -103,7 +94,7 @@ Behavior:
 5. Verify SSH readiness again after sync and before command execution. The configured SSH port is preferred, with port 22 as a bootstrap fallback when the runner exposes default SSH first.
 6. Run command over SSH.
 7. Stream remote output.
-8. Heartbeat in the background.
+8. Heartbeat coordinator leases in the background.
 9. Release lease unless `--keep` is set.
 10. Exit with the remote command exit code.
 
@@ -118,13 +109,9 @@ Flags:
 --class <name>          machine class override
 --type <name>           provider server or instance type override
 --ttl <duration>        lease TTL, default from profile
---workdir <path>        remote workdir override
---env <name>            include one env var by exact name
---env-prefix <prefix>   include env vars by prefix
 --no-sync               run without syncing
 --sync-only             sync and exit
 --keep                  keep lease after command exits
---dry-run               print acquisition/sync/run plan only
 ```
 
 Secrets must not be accepted as flag values. Env forwarding is name-based only.

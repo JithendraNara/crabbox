@@ -3,6 +3,7 @@ package cli
 import (
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -135,6 +136,10 @@ func (a App) runCommand(ctx context.Context, args []string) error {
 			}
 		}()
 	}
+	if useCoordinator && leaseID != "" {
+		stopHeartbeat := startCoordinatorHeartbeat(ctx, coord, leaseID, cfg.TTL, a.Stderr)
+		defer stopHeartbeat()
+	}
 
 	repo, err := findRepo()
 	if err != nil {
@@ -166,6 +171,10 @@ func (a App) runCommand(ctx context.Context, args []string) error {
 
 	if err := waitForSSHReady(ctx, &target, a.Stderr, "before command", 2*time.Minute); err != nil {
 		return err
+	}
+	if !useCoordinator {
+		setServerState(context.Background(), cfg, server, "running", a.Stderr)
+		defer setServerState(context.Background(), cfg, server, "ready", a.Stderr)
 	}
 	fmt.Fprintf(a.Stderr, "running on %s %s\n", target.Host, strings.Join(command, " "))
 	code := runSSHStream(ctx, target, remoteCommand(workdir, allowedEnv(), command), a.Stdout, a.Stderr)
@@ -262,6 +271,74 @@ func releaseCoordinatorLease(ctx context.Context, coord *CoordinatorClient, leas
 		time.Sleep(time.Duration(attempt*2) * time.Second)
 	}
 	return lastErr
+}
+
+func startCoordinatorHeartbeat(ctx context.Context, coord *CoordinatorClient, leaseID string, ttl time.Duration, stderr io.Writer) func() {
+	rootCtx, cancel := context.WithCancel(ctx)
+	interval := heartbeatInterval(ttl)
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		ticker := time.NewTicker(interval)
+		defer ticker.Stop()
+		for {
+			callCtx, heartbeatCancel := context.WithTimeout(rootCtx, 20*time.Second)
+			_, err := coord.HeartbeatLease(callCtx, leaseID)
+			heartbeatCancel()
+			if err != nil && rootCtx.Err() == nil {
+				fmt.Fprintf(stderr, "warning: heartbeat failed for %s: %v\n", leaseID, err)
+			}
+			select {
+			case <-ticker.C:
+			case <-rootCtx.Done():
+				return
+			}
+		}
+	}()
+	return func() {
+		cancel()
+		<-done
+	}
+}
+
+func heartbeatInterval(ttl time.Duration) time.Duration {
+	if ttl <= 0 {
+		return time.Minute
+	}
+	interval := ttl / 3
+	if interval < 5*time.Second {
+		return 5 * time.Second
+	}
+	if interval > time.Minute {
+		return time.Minute
+	}
+	return interval
+}
+
+func setServerState(ctx context.Context, cfg Config, server Server, state string, stderr io.Writer) {
+	if server.Labels == nil {
+		server.Labels = map[string]string{}
+	}
+	server.Labels["state"] = state
+	if cfg.Provider == "aws" || server.Provider == "aws" || strings.HasPrefix(server.CloudID, "i-") {
+		client, err := newAWSClient(ctx, cfg)
+		if err != nil {
+			fmt.Fprintf(stderr, "warning: set server state=%s: %v\n", state, err)
+			return
+		}
+		if err := client.SetTags(ctx, server.CloudID, server.Labels); err != nil {
+			fmt.Fprintf(stderr, "warning: set server state=%s: %v\n", state, err)
+		}
+		return
+	}
+	client, err := newHetznerClient()
+	if err != nil {
+		fmt.Fprintf(stderr, "warning: set server state=%s: %v\n", state, err)
+		return
+	}
+	if err := client.SetLabels(ctx, server.ID, server.Labels); err != nil {
+		fmt.Fprintf(stderr, "warning: set server state=%s: %v\n", state, err)
+	}
 }
 
 func (a App) acquire(ctx context.Context, cfg Config, keep bool) (Server, SSHTarget, string, error) {

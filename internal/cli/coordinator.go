@@ -126,6 +126,14 @@ func (c *CoordinatorClient) ReleaseLease(ctx context.Context, id string, deleteS
 	return res.Lease, err
 }
 
+func (c *CoordinatorClient) HeartbeatLease(ctx context.Context, id string) (CoordinatorLease, error) {
+	var res struct {
+		Lease CoordinatorLease `json:"lease"`
+	}
+	err := c.do(ctx, http.MethodPost, "/v1/leases/"+url.PathEscape(id)+"/heartbeat", map[string]any{}, &res)
+	return res.Lease, err
+}
+
 func (c *CoordinatorClient) Pool(ctx context.Context, cfg Config) ([]CoordinatorMachine, error) {
 	var res struct {
 		Machines []CoordinatorMachine `json:"machines"`
