@@ -132,7 +132,7 @@ Current direct-CLI status:
 - `crabbox warmup --profile openclaw-check --class beast --keep` provisions through the Hetzner API without requiring `hcloud`.
 - The `beast` class tries `ccx63`, `ccx53`, `ccx43`, `cpx62`, then `cx53`.
 - Dedicated-core types currently fail on the available account quota, so the verified runner used `cpx62`.
-- Cloud-init installs Node 24, pnpm via corepack, Docker, Git, rsync, and a readiness probe through a retrying bootstrap script. This is required because AWS Ubuntu mirrors can transiently return 503 during Docker dependency installation.
+- Cloud-init installs only Crabbox plumbing: OpenSSH, curl/CA certificates, Git, rsync, jq, and a readiness probe through a retrying bootstrap script. Project runtimes and services are supplied by Actions hydration or repo-owned setup.
 - SSH prefers port 2222 and falls back to port 22 during AWS bootstrap when the base image exposes default SSH before the custom port restart lands.
 - The verified kept lease was `cbx_f782c469c9ce` on server `128694755`, `cpx62`, `188.245.91.84`.
 

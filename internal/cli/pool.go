@@ -198,10 +198,7 @@ func cleanupExpiry(labels map[string]string) (time.Time, bool) {
 		if value == "" {
 			continue
 		}
-		if parsed, err := time.Parse(time.RFC3339, value); err == nil {
-			return parsed, true
-		}
-		if parsed, err := time.Parse(time.RFC3339Nano, value); err == nil {
+		if parsed, ok := parseLeaseLabelTime(value); ok {
 			return parsed, true
 		}
 	}
@@ -209,12 +206,5 @@ func cleanupExpiry(labels map[string]string) (time.Time, bool) {
 }
 
 func directLeaseExpiresAt(now time.Time, cfg Config) time.Time {
-	expiresAt := now.Add(cfg.IdleTimeout)
-	if cfg.TTL > 0 {
-		ttlExpiresAt := now.Add(cfg.TTL)
-		if ttlExpiresAt.Before(expiresAt) {
-			expiresAt = ttlExpiresAt
-		}
-	}
-	return expiresAt
+	return directLeaseExpiresAtFrom(now, now, cfg.TTL, cfg.IdleTimeout)
 }

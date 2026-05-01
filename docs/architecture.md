@@ -108,14 +108,13 @@ Bootstrap should produce machines with:
 
 - `crabbox` user.
 - SSH key-only auth.
-- Docker.
 - Git.
-- Node 24.
-- pnpm.
-- build-essential.
 - rsync.
+- curl.
+- jq.
 - writable `/work/crabbox`.
-- cleanup service or boot-time cleanup script.
+
+Language runtimes, Docker, services, dependencies, and secrets are project setup, not Crabbox base bootstrap. Use GitHub Actions hydration, devcontainers, Nix, mise/asdf, or repository scripts for that layer.
 
 Prefer snapshots/images once bootstrap is proven. Cloud-init is acceptable for first pass.
 

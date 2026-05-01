@@ -23,6 +23,7 @@ export class FleetDurableObject implements DurableObject {
   constructor(
     private readonly state: DurableObjectState,
     private readonly env: Env,
+    private readonly testProviders: Partial<Record<Provider, CloudProvider>> = {},
   ) {}
 
   async fetch(request: Request): Promise<Response> {
@@ -524,6 +525,10 @@ export class FleetDurableObject implements DurableObject {
   }
 
   private provider(provider: Provider, region = "eu-west-1"): CloudProvider {
+    const testProvider = this.testProviders[provider];
+    if (testProvider) {
+      return testProvider;
+    }
     if (provider === "aws") {
       return new AWSProvider(this.env, region || this.env.CRABBOX_AWS_REGION || "eu-west-1");
     }

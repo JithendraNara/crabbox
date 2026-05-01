@@ -38,6 +38,53 @@ class MemoryStorage {
 }
 
 describe("fleet lease identity and idle", () => {
+  it("creates leases through the public route with slug and idle metadata", async () => {
+    const storage = new MemoryStorage();
+    const fleet = testFleet(storage, {
+      hetzner: fakeProvider(),
+    });
+    const create = await fleet.fetch(
+      request("POST", "/v1/leases", {
+        headers: {
+          "cf-access-authenticated-user-email": "peter@example.com",
+          "x-crabbox-org": "openclaw",
+        },
+        body: {
+          leaseID: "cbx_abcdef123456",
+          slug: "Blue Lobster",
+          provider: "hetzner",
+          class: "standard",
+          serverType: "cpx62",
+          ttlSeconds: 1200,
+          idleTimeoutSeconds: 360,
+          keep: true,
+          sshPublicKey: "ssh-ed25519 test",
+        },
+      }),
+    );
+    expect(create.status).toBe(201);
+    const { lease } = (await create.json()) as { lease: LeaseRecord };
+    expect(lease.id).toBe("cbx_abcdef123456");
+    expect(lease.slug).toBe("blue-lobster");
+    expect(lease.idleTimeoutSeconds).toBe(360);
+    expect(lease.ttlSeconds).toBe(1200);
+    expect(lease.lastTouchedAt).toBeTruthy();
+    expect(Date.parse(lease.expiresAt)).toBeGreaterThan(Date.parse(lease.createdAt));
+
+    const bySlug = await fleet.fetch(
+      request("GET", "/v1/leases/blue-lobster", {
+        headers: {
+          "cf-access-authenticated-user-email": "peter@example.com",
+          "x-crabbox-org": "openclaw",
+        },
+      }),
+    );
+    expect(bySlug.status).toBe(200);
+    const found = (await bySlug.json()) as { lease: LeaseRecord };
+    expect(found.lease.id).toBe("cbx_abcdef123456");
+    expect(found.lease.slug).toBe("blue-lobster");
+  });
+
   it("resolves owner-scoped slugs and heartbeat extends idle expiry", async () => {
     const storage = new MemoryStorage();
     const fleet = testFleet(storage);
@@ -210,11 +257,40 @@ describe("fleet identity", () => {
   });
 });
 
-function testFleet(storage = new MemoryStorage()): FleetDurableObject {
+function testFleet(storage = new MemoryStorage(), providers = {}): FleetDurableObject {
   return new FleetDurableObject(
     { storage } as unknown as DurableObjectState,
     { CRABBOX_DEFAULT_ORG: "default-org" } as Env,
+    providers,
   );
+}
+
+function fakeProvider() {
+  return {
+    async listCrabboxServers() {
+      return [];
+    },
+    async createServerWithFallback(_config: unknown, _leaseID: string, slug: string) {
+      return {
+        server: {
+          provider: "hetzner",
+          id: 123,
+          cloudID: "123",
+          name: `crabbox-${slug}`,
+          status: "running",
+          serverType: "cpx62",
+          host: "192.0.2.10",
+          labels: {},
+        },
+        serverType: "cpx62",
+      };
+    },
+    async deleteServer() {},
+    async deleteSSHKey() {},
+    async hourlyPriceUSD() {
+      return 0.1;
+    },
+  };
 }
 
 function testLease(overrides: Partial<LeaseRecord>): LeaseRecord {

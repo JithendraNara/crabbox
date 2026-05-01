@@ -61,7 +61,7 @@ The **provider layer** provisions capacity:
 - Hetzner: imports or reuses the SSH key, creates a server, applies Crabbox labels, and falls back across configured server types when quota or capacity rejects a request.
 - AWS: signs EC2 Query API calls inside the Worker, imports or reuses the SSH key pair, creates or reuses the `crabbox-runners` security group, launches one-time Spot instances, tags instances/volumes/Spot requests, and falls back across broad C/M/R instance families. Direct AWS mode can use Spot placement scores across configured regions before provisioning.
 
-The **runner** is just an Ubuntu machine bootstrapped by cloud-init. Bootstrap creates the `crabbox` user, enables SSH on port `2222`, installs Node 24, pnpm, Docker, Git, rsync, build tools, and prepares `/work/crabbox` plus shared package caches. Package installation runs through an explicit retrying bootstrap script so transient Ubuntu mirror errors do not strand the machine. It does not need broker credentials.
+The **runner** is just an Ubuntu machine bootstrapped by cloud-init. Bootstrap creates the `crabbox` user, enables SSH on port `2222`, installs only Crabbox plumbing (`curl`, Git, rsync, jq, OpenSSH), and prepares `/work/crabbox` plus cache directories. Project runtimes such as Go, Node, pnpm, Docker, services, and secrets belong in the repository's GitHub Actions hydration, devcontainer, Nix, mise/asdf, or setup scripts. The runner does not need broker credentials.
 
 The normal lifecycle is:
 
@@ -117,7 +117,7 @@ Working today:
 - [Cloudflare route for `crabbox.clawd.bot/*`](docs/features/broker-auth-routing.md)
 - [Hetzner server provisioning with class fallback](docs/features/providers.md)
 - [AWS EC2 Spot provisioning with class fallback](docs/features/providers.md)
-- [cloud-init bootstrap for Node 24, pnpm, Docker, Git, and rsync, with apt/corepack retries](docs/features/runner-bootstrap.md)
+- [minimal cloud-init bootstrap for SSH, Git, rsync, and work directories](docs/features/runner-bootstrap.md)
 - [Git file-list rsync overlay of tracked and nonignored local files](docs/features/sync.md)
 - [sync fingerprint skip for no-change hot runs](docs/features/sync.md)
 - [per-lease SSH keys under the Crabbox config directory](docs/features/ssh-keys.md)
