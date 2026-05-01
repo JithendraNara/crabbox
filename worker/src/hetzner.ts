@@ -1,5 +1,7 @@
 import { cloudInit } from "./bootstrap";
 import { serverTypeCandidatesForClass, type LeaseConfig } from "./config";
+import { leaseProviderLabels } from "./provider-labels";
+import { leaseProviderName } from "./slug";
 import type { Env, HetznerSSHKey, HetznerServer, ProviderMachine } from "./types";
 
 interface HetznerListServersResponse {
@@ -119,6 +121,7 @@ export class HetznerClient {
   async createServerWithFallback(
     config: LeaseConfig,
     leaseID: string,
+    slug: string,
     owner: string,
   ): Promise<{ server: HetznerServer; serverType: string }> {
     const key = await this.ensureSSHKey(config.providerKey, config.sshPublicKey);
@@ -131,7 +134,12 @@ export class HetznerClient {
     for (const serverType of candidates) {
       try {
         // oxlint-disable-next-line eslint/no-await-in-loop -- server-type fallback must stay sequential.
-        const server = await this.createServer({ ...resolvedConfig, serverType }, leaseID, owner);
+        const server = await this.createServer(
+          { ...resolvedConfig, serverType },
+          leaseID,
+          slug,
+          owner,
+        );
         return { server, serverType };
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
@@ -182,24 +190,12 @@ export class HetznerClient {
   private async createServer(
     config: LeaseConfig,
     leaseID: string,
+    slug: string,
     owner: string,
   ): Promise<HetznerServer> {
     const now = new Date();
-    const name = `crabbox-${leaseID}`.replaceAll("_", "-");
-    const labels = {
-      crabbox: "true",
-      profile: config.profile,
-      class: config.class,
-      server_type: config.serverType,
-      lease: leaseID,
-      state: "leased",
-      keep: String(config.keep),
-      provider_key: config.providerKey,
-      owner: sanitizeLabel(owner),
-      created_by: "crabbox",
-      created_at: now.toISOString(),
-      expires_at: new Date(now.getTime() + config.ttlSeconds * 1000).toISOString(),
-    };
+    const name = leaseProviderName(leaseID, slug);
+    const labels = leaseProviderLabels(config, leaseID, slug, owner, "hetzner", now);
     const response = await this.request<HetznerServerResponse>("POST", "/servers", {
       name,
       server_type: config.serverType,
@@ -254,10 +250,6 @@ export function isRetryableProvisioningError(message: string): boolean {
 
 function prependUnique(first: string, rest: string[]): string[] {
   return [first, ...rest.filter((value) => value !== first)];
-}
-
-function sanitizeLabel(value: string): string {
-  return value.replaceAll(/[^a-zA-Z0-9_.@-]/g, "_").slice(0, 63) || "unknown";
 }
 
 function eurToUSD(env: Env): number {

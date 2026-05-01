@@ -1,0 +1,45 @@
+import { describe, expect, it } from "vitest";
+
+import type { LeaseConfig } from "../src/config";
+import { leaseProviderLabels } from "../src/provider-labels";
+
+describe("provider labels", () => {
+  it("caps expires_at at the shorter of ttl and idle timeout", () => {
+    const config: LeaseConfig = {
+      provider: "aws",
+      profile: "default",
+      class: "beast",
+      serverType: "c7a.48xlarge",
+      image: "ami",
+      location: "eu-west-1",
+      sshUser: "crabbox",
+      sshPort: "2222",
+      awsRegion: "eu-west-1",
+      awsRootGB: 400,
+      awsAMI: "",
+      awsSGID: "",
+      awsSubnetID: "",
+      awsProfile: "",
+      capacityMarket: "spot",
+      capacityStrategy: "most-available",
+      capacityFallback: "on-demand-after-120s",
+      capacityRegions: [],
+      capacityAvailabilityZones: [],
+      providerKey: "crabbox-cbx-123",
+      workRoot: "/work/crabbox",
+      ttlSeconds: 600,
+      idleTimeoutSeconds: 7200,
+      keep: false,
+      sshPublicKey: "ssh-ed25519 test",
+    };
+    const labels = leaseProviderLabels(
+      config,
+      "cbx_123",
+      "blue-lobster",
+      "peter@example.com",
+      "aws",
+      new Date("2026-05-01T12:00:00Z"),
+    );
+    expect(labels.expires_at).toBe("2026-05-01T12:10:00.000Z");
+  });
+});

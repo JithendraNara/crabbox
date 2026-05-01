@@ -3,6 +3,8 @@ import { XMLParser } from "fast-xml-parser";
 
 import { cloudInit } from "./bootstrap";
 import { awsInstanceTypeCandidatesForClass, type LeaseConfig } from "./config";
+import { leaseProviderLabels } from "./provider-labels";
+import { leaseProviderName } from "./slug";
 import type { Env, ProviderMachine } from "./types";
 
 const awsUbuntuOwner = "099720109477";
@@ -55,6 +57,7 @@ export class EC2SpotClient {
   async createServerWithFallback(
     config: LeaseConfig,
     leaseID: string,
+    slug: string,
     owner: string,
   ): Promise<{ server: ProviderMachine; serverType: string }> {
     await this.ensureSSHKey(config.providerKey, config.sshPublicKey);
@@ -71,6 +74,7 @@ export class EC2SpotClient {
         const server = await this.createServer(
           { ...config, serverType },
           leaseID,
+          slug,
           owner,
           imageID,
           securityGroupID,
@@ -91,6 +95,7 @@ export class EC2SpotClient {
           const server = await this.createServer(
             { ...config, capacityMarket: "on-demand", serverType },
             leaseID,
+            slug,
             owner,
             imageID,
             securityGroupID,
@@ -188,28 +193,16 @@ export class EC2SpotClient {
   private async createServer(
     config: LeaseConfig,
     leaseID: string,
+    slug: string,
     owner: string,
     imageID: string,
     securityGroupID: string,
   ): Promise<ProviderMachine> {
     const now = new Date();
-    const name = `crabbox-${leaseID}`.replaceAll("_", "-");
-    const labels = {
-      class: config.class,
-      crabbox: "true",
-      created_by: "crabbox",
-      keep: String(config.keep),
-      lease: leaseID,
-      owner: sanitizeLabel(owner),
-      profile: config.profile,
-      provider_key: config.providerKey,
-      provider: "aws",
-      server_type: config.serverType,
+    const name = leaseProviderName(leaseID, slug);
+    const labels = leaseProviderLabels(config, leaseID, slug, owner, "aws", now, {
       market: config.capacityMarket,
-      state: "leased",
-      created_at: now.toISOString(),
-      expires_at: new Date(now.getTime() + config.ttlSeconds * 1000).toISOString(),
-    };
+    });
     const rootGB = config.awsRootGB || positiveInt(this.env.CRABBOX_AWS_ROOT_GB) || 400;
     const instanceProfile = config.awsProfile || this.env.CRABBOX_AWS_INSTANCE_PROFILE || "";
     const subnetID = config.awsSubnetID || this.env.CRABBOX_AWS_SUBNET_ID || "";
@@ -471,10 +464,6 @@ function positiveInt(value: string | undefined): number {
 function positiveFloat(value: string): number | undefined {
   const parsed = Number.parseFloat(value);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : undefined;
-}
-
-function sanitizeLabel(value: string): string {
-  return value.replaceAll(/[^a-zA-Z0-9_.@-]/g, "_").slice(0, 63) || "unknown";
 }
 
 function isRetryableAWSProvisioningError(message: string): boolean {

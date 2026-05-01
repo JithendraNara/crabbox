@@ -2,6 +2,7 @@ import { EC2SpotClient } from "./aws";
 import { leaseConfig } from "./config";
 import { HetznerClient } from "./hetzner";
 import { errorMessage, json, pathParts, readJson, requestOwner } from "./http";
+import { leaseSlugFromID, normalizeLeaseSlug, slugWithCollisionSuffix } from "./slug";
 import type {
   Env,
   LeaseRecord,
@@ -81,6 +82,14 @@ export class FleetDurableObject implements DurableObject {
     const input = await readJson<LeaseRequest>(request);
     const config = leaseConfig(input);
     const leaseID = validLeaseID(input.leaseID) ? input.leaseID : newLeaseID();
+    const leases = await this.leaseRecords();
+    const slug = allocateLeaseSlug(
+      normalizeLeaseSlug(input.slug ?? input.requestedSlug) || leaseSlugFromID(leaseID),
+      leaseID,
+      owner,
+      org,
+      leases,
+    );
     const provider = this.provider(config.provider, config.awsRegion);
     const providerHourlyUSD = await provider
       .hourlyPriceUSD(config.serverType, config)
@@ -95,6 +104,7 @@ export class FleetDurableObject implements DurableObject {
     const now = new Date();
     const record: LeaseRecord = {
       id: leaseID,
+      slug,
       provider: config.provider,
       cloudID: "",
       owner,
@@ -111,19 +121,30 @@ export class FleetDurableObject implements DurableObject {
       workRoot: config.workRoot,
       keep: config.keep,
       ttlSeconds: config.ttlSeconds,
+      idleTimeoutSeconds: config.idleTimeoutSeconds,
       estimatedHourlyUSD: cost.hourlyUSD,
       maxEstimatedUSD: cost.maxUSD,
       state: "active",
       createdAt: now.toISOString(),
       updatedAt: now.toISOString(),
-      expiresAt: new Date(now.getTime() + config.ttlSeconds * 1000).toISOString(),
+      lastTouchedAt: now.toISOString(),
+      expiresAt: leaseExpiresAt(
+        now,
+        now,
+        config.ttlSeconds,
+        config.idleTimeoutSeconds,
+      ).toISOString(),
     };
-    const leases = await this.leaseRecords();
     const limitError = enforceCostLimits(leases, record, costLimits(this.env), now);
     if (limitError) {
       return json({ error: "cost_limit_exceeded", message: limitError }, { status: 429 });
     }
-    const { server, serverType } = await provider.createServerWithFallback(config, leaseID, owner);
+    const { server, serverType } = await provider.createServerWithFallback(
+      config,
+      leaseID,
+      slug,
+      owner,
+    );
     record.cloudID = server.cloudID;
     record.serverType = serverType;
     record.serverID = server.id;
@@ -152,26 +173,36 @@ export class FleetDurableObject implements DurableObject {
   private async leaseRoute(request: Request, leaseID: string, action?: string): Promise<Response> {
     const method = request.method.toUpperCase();
     if (method === "GET" && action === undefined) {
-      const lease = await this.getLease(leaseID);
+      const lease = await this.resolveLease(leaseID, request, false);
       return lease ? json({ lease }) : json({ error: "not_found" }, { status: 404 });
     }
     if (method === "POST" && action === "heartbeat") {
-      const lease = await this.requireLease(leaseID);
+      const lease = await this.requireLease(leaseID, request, false);
+      const body = await optionalJson<{ idleTimeoutSeconds?: number }>(request);
       const now = new Date();
+      const requestedIdleTimeoutSeconds = body.idleTimeoutSeconds;
+      if (
+        Number.isFinite(requestedIdleTimeoutSeconds) &&
+        requestedIdleTimeoutSeconds !== undefined &&
+        requestedIdleTimeoutSeconds > 0
+      ) {
+        lease.idleTimeoutSeconds = clampLeaseSeconds(requestedIdleTimeoutSeconds, 86_400);
+      }
       lease.updatedAt = now.toISOString();
-      lease.expiresAt = new Date(now.getTime() + leaseTTLSeconds(lease) * 1000).toISOString();
+      lease.lastTouchedAt = now.toISOString();
+      lease.expiresAt = recomputeLeaseExpiresAt(lease, now).toISOString();
       await this.putLease(lease);
       await this.scheduleAlarm();
       return json({ lease });
     }
     if (method === "POST" && action === "release") {
-      return this.releaseLease(request, leaseID);
+      return this.releaseLease(request, leaseID, false);
     }
     return json({ error: "not_found" }, { status: 404 });
   }
 
-  private async releaseLease(request: Request, leaseID: string): Promise<Response> {
-    const lease = await this.requireLease(leaseID);
+  private async releaseLease(request: Request, leaseID: string, admin: boolean): Promise<Response> {
+    const lease = await this.requireLease(leaseID, request, admin);
     const body = await optionalJson<{ delete?: boolean }>(request);
     const shouldDelete = body.delete ?? !lease.keep;
     if (shouldDelete && lease.state === "active") {
@@ -228,16 +259,16 @@ export class FleetDurableObject implements DurableObject {
       return json({ error: "not_found" }, { status: 404 });
     }
     if (action === "release") {
-      return this.releaseLease(request, leaseID);
+      return this.releaseLease(request, leaseID, true);
     }
     if (action === "delete") {
-      return this.adminDeleteLease(leaseID);
+      return this.adminDeleteLease(request, leaseID);
     }
     return json({ error: "not_found" }, { status: 404 });
   }
 
-  private async adminDeleteLease(leaseID: string): Promise<Response> {
-    const lease = await this.requireLease(leaseID);
+  private async adminDeleteLease(request: Request, leaseID: string): Promise<Response> {
+    const lease = await this.requireLease(leaseID, request, true);
     if (lease.state === "active") {
       await this.deleteLeaseServer(lease);
     }
@@ -288,6 +319,9 @@ export class FleetDurableObject implements DurableObject {
       logTruncated: false,
       startedAt: now,
     };
+    if (lease?.slug) {
+      run.slug = lease.slug;
+    }
     await this.putRun(run);
     return json({ run }, { status: 201 });
   }
@@ -385,9 +419,7 @@ export class FleetDurableObject implements DurableObject {
     );
     await Promise.all(
       expired.map(async (lease) => {
-        if (!lease.keep) {
-          await this.deleteLeaseServer(lease).catch(() => undefined);
-        }
+        await this.deleteLeaseServer(lease).catch(() => undefined);
         const nowISO = new Date().toISOString();
         lease.state = "expired";
         lease.updatedAt = nowISO;
@@ -414,6 +446,39 @@ export class FleetDurableObject implements DurableObject {
     return this.state.storage.get<LeaseRecord>(leaseKey(leaseID));
   }
 
+  private async resolveLease(
+    identifier: string,
+    request: Request,
+    admin: boolean,
+  ): Promise<LeaseRecord | undefined> {
+    const exact = await this.getLease(identifier);
+    if (exact) {
+      return exact;
+    }
+    const slug = normalizeLeaseSlug(identifier);
+    if (!slug) {
+      return undefined;
+    }
+    const owner = requestOwner(request);
+    const org = requestOrg(request, this.env);
+    const now = Date.now();
+    let matches = (await this.leaseRecords()).filter(
+      (lease) =>
+        lease.state === "active" &&
+        Date.parse(lease.expiresAt) > now &&
+        normalizeLeaseSlug(lease.slug) === slug,
+    );
+    if (!admin) {
+      matches = matches.filter((lease) => lease.owner === owner && lease.org === org);
+    }
+    if (matches.length > 1) {
+      throw new Error(
+        `ambiguous slug ${slug}: ${matches.map((lease) => `${lease.id}:${lease.owner}`).join(", ")}`,
+      );
+    }
+    return matches[0];
+  }
+
   private async leaseRecords(): Promise<LeaseRecord[]> {
     const leases = await this.state.storage.list<LeaseRecord>({ prefix: "lease:" });
     return [...leases.values()];
@@ -424,8 +489,14 @@ export class FleetDurableObject implements DurableObject {
     return [...runs.values()];
   }
 
-  private async requireLease(leaseID: string): Promise<LeaseRecord> {
-    const lease = await this.getLease(leaseID);
+  private async requireLease(
+    leaseID: string,
+    request?: Request,
+    admin = false,
+  ): Promise<LeaseRecord> {
+    const lease = request
+      ? await this.resolveLease(leaseID, request, admin)
+      : await this.getLease(leaseID);
     if (!lease) {
       throw new Error(`lease not found: ${leaseID}`);
     }
@@ -579,6 +650,85 @@ function leaseTTLSeconds(lease: LeaseRecord): number {
   return 5_400;
 }
 
+function leaseIdleTimeoutSeconds(lease: LeaseRecord): number {
+  if (
+    Number.isFinite(lease.idleTimeoutSeconds) &&
+    lease.idleTimeoutSeconds &&
+    lease.idleTimeoutSeconds > 0
+  ) {
+    return lease.idleTimeoutSeconds;
+  }
+  return leaseTTLSeconds(lease);
+}
+
+function recomputeLeaseExpiresAt(lease: LeaseRecord, fallbackNow: Date): Date {
+  const createdAt = parseLeaseDate(lease.createdAt, fallbackNow);
+  const touchedAt = parseLeaseDate(lease.lastTouchedAt, createdAt);
+  return leaseExpiresAt(
+    createdAt,
+    touchedAt,
+    leaseTTLSeconds(lease),
+    leaseIdleTimeoutSeconds(lease),
+  );
+}
+
+function leaseExpiresAt(
+  createdAt: Date,
+  lastTouchedAt: Date,
+  ttlSeconds: number,
+  idleTimeoutSeconds: number,
+): Date {
+  const maxLifetime = createdAt.getTime() + Math.max(1, ttlSeconds) * 1000;
+  const idleExpiry = lastTouchedAt.getTime() + Math.max(1, idleTimeoutSeconds) * 1000;
+  return new Date(Math.min(maxLifetime, idleExpiry));
+}
+
+function parseLeaseDate(value: string | undefined, fallback: Date): Date {
+  const parsed = Date.parse(value ?? "");
+  return Number.isFinite(parsed) ? new Date(parsed) : fallback;
+}
+
+function clampLeaseSeconds(value: number | undefined, max: number): number {
+  if (!Number.isFinite(value) || value === undefined || value <= 0) {
+    return max;
+  }
+  return Math.min(Math.trunc(value), max);
+}
+
+function allocateLeaseSlug(
+  requested: string,
+  leaseID: string,
+  owner: string,
+  org: string,
+  leases: LeaseRecord[],
+): string {
+  let slug = normalizeLeaseSlug(requested) || leaseSlugFromID(leaseID);
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    if (!activeSlugCollision(slug, owner, org, leases)) {
+      return slug;
+    }
+    slug = slugWithCollisionSuffix(requested, `${leaseID}-${attempt}`);
+  }
+  throw new Error(`could not allocate slug for ${leaseID}`);
+}
+
+function activeSlugCollision(
+  slug: string,
+  owner: string,
+  org: string,
+  leases: LeaseRecord[],
+): boolean {
+  const now = Date.now();
+  return leases.some(
+    (lease) =>
+      lease.state === "active" &&
+      Date.parse(lease.expiresAt) > now &&
+      lease.owner === owner &&
+      lease.org === org &&
+      normalizeLeaseSlug(lease.slug) === slug,
+  );
+}
+
 async function optionalJson<T>(request: Request): Promise<T> {
   if (!request.headers.get("content-type")?.includes("application/json")) {
     return {} as T;
@@ -591,6 +741,7 @@ interface CloudProvider {
   createServerWithFallback(
     config: ReturnType<typeof leaseConfig>,
     leaseID: string,
+    slug: string,
     owner: string,
   ): Promise<{ server: ProviderMachine; serverType: string }>;
   deleteServer(id: string): Promise<void>;
@@ -616,11 +767,13 @@ class HetznerProvider implements CloudProvider {
   async createServerWithFallback(
     config: ReturnType<typeof leaseConfig>,
     leaseID: string,
+    slug: string,
     owner: string,
   ): Promise<{ server: ProviderMachine; serverType: string }> {
     const { server, serverType } = await this.client.createServerWithFallback(
       config,
       leaseID,
+      slug,
       owner,
     );
     return { server: this.client.toMachine(server), serverType };
@@ -656,11 +809,13 @@ class AWSProvider implements CloudProvider {
   async createServerWithFallback(
     config: ReturnType<typeof leaseConfig>,
     leaseID: string,
+    slug: string,
     owner: string,
   ): Promise<{ server: ProviderMachine; serverType: string }> {
     const { server, serverType } = await this.client.createServerWithFallback(
       config,
       leaseID,
+      slug,
       owner,
     );
     return { server: await this.client.waitForServerIP(server.cloudID), serverType };

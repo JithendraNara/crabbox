@@ -24,6 +24,8 @@ export interface Env {
 
 export interface LeaseRequest {
   leaseID?: string;
+  slug?: string;
+  requestedSlug?: string;
   provider?: Provider;
   profile?: string;
   class?: string;
@@ -48,6 +50,7 @@ export interface LeaseRequest {
   providerKey?: string;
   workRoot?: string;
   ttlSeconds?: number;
+  idleTimeoutSeconds?: number;
   keep?: boolean;
   sshPublicKey?: string;
 }
@@ -56,6 +59,7 @@ export type Provider = "hetzner" | "aws";
 
 export interface LeaseRecord {
   id: string;
+  slug?: string;
   provider: Provider;
   cloudID: string;
   region?: string;
@@ -73,11 +77,13 @@ export interface LeaseRecord {
   workRoot: string;
   keep: boolean;
   ttlSeconds: number;
+  idleTimeoutSeconds?: number;
   estimatedHourlyUSD: number;
   maxEstimatedUSD: number;
   state: "active" | "released" | "expired" | "failed";
   createdAt: string;
   updatedAt: string;
+  lastTouchedAt?: string;
   expiresAt: string;
   releasedAt?: string;
   endedAt?: string;
@@ -86,6 +92,7 @@ export interface LeaseRecord {
 export interface RunRecord {
   id: string;
   leaseID: string;
+  slug?: string;
   owner: string;
   org: string;
   provider: Provider;

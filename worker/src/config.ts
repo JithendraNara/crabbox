@@ -27,6 +27,7 @@ export interface LeaseConfig {
   providerKey: string;
   workRoot: string;
   ttlSeconds: number;
+  idleTimeoutSeconds: number;
   keep: boolean;
   sshPublicKey: string;
 }
@@ -39,6 +40,7 @@ export function leaseConfig(input: LeaseRequest): LeaseConfig {
   const machineClass = input.class ?? "beast";
   const serverType = input.serverType ?? serverTypeForProviderClass(provider, machineClass);
   const ttlSeconds = clampTTL(input.ttlSeconds ?? 5400);
+  const idleTimeoutSeconds = clampIdleTimeout(input.idleTimeoutSeconds ?? 1800);
   const sshPublicKey = input.sshPublicKey?.trim() ?? "";
   if (!sshPublicKey) {
     throw new Error("sshPublicKey is required");
@@ -66,6 +68,7 @@ export function leaseConfig(input: LeaseRequest): LeaseConfig {
     providerKey: input.providerKey ?? "crabbox-steipete",
     workRoot: input.workRoot ?? "/work/crabbox",
     ttlSeconds,
+    idleTimeoutSeconds,
     keep: input.keep ?? false,
     sshPublicKey,
   };
@@ -143,4 +146,11 @@ function clampTTL(ttlSeconds: number): number {
     return 5400;
   }
   return Math.min(Math.trunc(ttlSeconds), 86_400);
+}
+
+function clampIdleTimeout(seconds: number): number {
+  if (!Number.isFinite(seconds) || seconds <= 0) {
+    return 1800;
+  }
+  return Math.min(Math.trunc(seconds), 86_400);
 }
