@@ -69,9 +69,9 @@ func TestParseActionsHydrationState(t *testing.T) {
 	}
 }
 
-func TestActionsHydrationStatePathSanitizesLease(t *testing.T) {
+func TestActionsHydrationStatePathMatchesWorkflowInput(t *testing.T) {
 	got := actionsHydrationStatePath("cbx_123")
-	if got != ".crabbox/actions/cbx-123.env" {
+	if got != ".crabbox/actions/cbx_123.env" {
 		t.Fatalf("state path=%q", got)
 	}
 }
@@ -79,8 +79,8 @@ func TestActionsHydrationStatePathSanitizesLease(t *testing.T) {
 func TestRemoteClearActionsHydrationStateRemovesReadyAndStop(t *testing.T) {
 	got := remoteClearActionsHydrationState("cbx_123")
 	for _, want := range []string{
-		".crabbox/actions/cbx-123.env",
-		".crabbox/actions/cbx-123.stop",
+		".crabbox/actions/cbx_123.env",
+		".crabbox/actions/cbx_123.stop",
 	} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("clear command %q missing %q", got, want)

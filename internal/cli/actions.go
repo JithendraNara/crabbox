@@ -345,11 +345,11 @@ func remoteClearActionsHydrationState(leaseID string) string {
 }
 
 func actionsHydrationStatePath(leaseID string) string {
-	return ".crabbox/actions/" + sanitizeGitHubRunnerLabel(leaseID) + ".env"
+	return ".crabbox/actions/" + leaseID + ".env"
 }
 
 func actionsHydrationStopPath(leaseID string) string {
-	return ".crabbox/actions/" + sanitizeGitHubRunnerLabel(leaseID) + ".stop"
+	return ".crabbox/actions/" + leaseID + ".stop"
 }
 
 func githubActionsRunnerInstallScript(version string, ephemeral bool) string {
