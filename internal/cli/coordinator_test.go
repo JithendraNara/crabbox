@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"bytes"
 	"encoding/json"
 	"os"
 	"strings"
@@ -34,6 +35,16 @@ func TestSplitCurlResponseParsesTrailingStatus(t *testing.T) {
 	}
 	if string(body) != `{"ok":true}` {
 		t.Fatalf("body = %q", body)
+	}
+}
+
+func TestDecodeCoordinatorResponseCanReadTextBody(t *testing.T) {
+	var buf bytes.Buffer
+	if err := decodeCoordinatorResponse("GET", "/v1/runs/run_1/logs", 200, strings.NewReader("hello"), &buf); err != nil {
+		t.Fatal(err)
+	}
+	if buf.String() != "hello" {
+		t.Fatalf("body=%q", buf.String())
 	}
 }
 

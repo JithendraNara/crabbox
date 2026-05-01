@@ -83,6 +83,42 @@ export interface LeaseRecord {
   endedAt?: string;
 }
 
+export interface RunRecord {
+  id: string;
+  leaseID: string;
+  owner: string;
+  org: string;
+  provider: Provider;
+  class: string;
+  serverType: string;
+  command: string[];
+  state: "running" | "succeeded" | "failed";
+  exitCode?: number;
+  syncMs?: number;
+  commandMs?: number;
+  durationMs?: number;
+  logBytes: number;
+  logTruncated: boolean;
+  startedAt: string;
+  endedAt?: string;
+}
+
+export interface RunCreateRequest {
+  leaseID: string;
+  provider?: Provider;
+  class?: string;
+  serverType?: string;
+  command?: string[];
+}
+
+export interface RunFinishRequest {
+  exitCode: number;
+  syncMs?: number;
+  commandMs?: number;
+  log?: string;
+  logTruncated?: boolean;
+}
+
 export interface HetznerServer {
   id: number;
   name: string;

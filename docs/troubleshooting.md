@@ -50,7 +50,7 @@ Symptoms:
 Checks:
 
 ```sh
-bin/crabbox usage --scope user --owner "$(git config user.email)"
+bin/crabbox usage --scope user --user "$(git config user.email)"
 bin/crabbox usage --scope org --org openclaw
 ```
 

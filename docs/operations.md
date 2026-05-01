@@ -25,11 +25,13 @@ npm run check --prefix worker
 npm test --prefix worker
 node scripts/build-docs-site.mjs
 bin/crabbox doctor
+bin/crabbox whoami
 bin/crabbox status --json
 bin/crabbox usage --scope all --json
+bin/crabbox history --limit 5
 ```
 
-`crabbox doctor` checks local prerequisites and coordinator reachability. `crabbox status` confirms the broker can answer lease state. `crabbox usage` proves the usage endpoint and cost accounting path are reachable.
+`crabbox doctor` checks local prerequisites and coordinator reachability. `crabbox whoami` verifies identity. `crabbox status` confirms the broker can answer lease state. `crabbox usage` proves the cost accounting path is reachable. `crabbox history` proves run history is reachable.
 
 ## Deployment
 
@@ -92,9 +94,12 @@ Use:
 
 ```sh
 bin/crabbox list
+bin/crabbox admin leases --state active
 bin/crabbox inspect --id cbx_... --json
 bin/crabbox stop cbx_...
 ```
+
+Trusted operators can use `crabbox admin release` or `crabbox admin delete --force` for stuck leases.
 
 Direct-provider cleanup is only for debug mode without a coordinator:
 
@@ -111,7 +116,7 @@ Use:
 
 ```sh
 bin/crabbox usage
-bin/crabbox usage --scope user --owner someone@example.com
+bin/crabbox usage --scope user --user someone@example.com
 bin/crabbox usage --scope org --org openclaw
 bin/crabbox usage --scope all --json
 ```

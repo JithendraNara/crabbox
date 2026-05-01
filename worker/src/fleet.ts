@@ -2,7 +2,16 @@ import { EC2SpotClient } from "./aws";
 import { leaseConfig } from "./config";
 import { HetznerClient } from "./hetzner";
 import { errorMessage, json, pathParts, readJson, requestOwner } from "./http";
-import type { Env, LeaseRecord, LeaseRequest, Provider, ProviderMachine } from "./types";
+import type {
+  Env,
+  LeaseRecord,
+  LeaseRequest,
+  Provider,
+  ProviderMachine,
+  RunCreateRequest,
+  RunFinishRequest,
+  RunRecord,
+} from "./types";
 import { costLimits, enforceCostLimits, leaseCost, requestOrg, usageSummary } from "./usage";
 
 const fleetID = "default";
@@ -25,6 +34,24 @@ export class FleetDurableObject implements DurableObject {
       }
       if (method === "GET" && parts.join("/") === "v1/usage") {
         return await this.usage(request);
+      }
+      if (method === "GET" && parts.join("/") === "v1/whoami") {
+        return this.whoami(request);
+      }
+      if (method === "GET" && parts.join("/") === "v1/admin/leases") {
+        return await this.adminLeases(request);
+      }
+      if (parts[0] === "v1" && parts[1] === "admin" && parts[2] === "leases" && parts[3]) {
+        return await this.adminLeaseRoute(request, parts[3], parts[4]);
+      }
+      if (method === "GET" && parts.join("/") === "v1/runs") {
+        return await this.listRuns(request);
+      }
+      if (method === "POST" && parts.join("/") === "v1/runs") {
+        return await this.createRun(request);
+      }
+      if (parts[0] === "v1" && parts[1] === "runs" && parts[2]) {
+        return await this.runRoute(request, parts[2], parts[3]);
       }
       if (method === "GET" && parts.join("/") === "v1/leases") {
         return await this.listLeases();
@@ -157,6 +184,14 @@ export class FleetDurableObject implements DurableObject {
     return json({ lease });
   }
 
+  private whoami(request: Request): Response {
+    return json({
+      owner: requestOwner(request),
+      org: requestOrg(request, this.env),
+      auth: "bearer",
+    });
+  }
+
   private async pool(request: Request): Promise<Response> {
     const url = new URL(request.url);
     const provider = url.searchParams.get("provider");
@@ -176,6 +211,151 @@ export class FleetDurableObject implements DurableObject {
 
   private async listLeases(): Promise<Response> {
     return json({ leases: await this.leaseRecords() });
+  }
+
+  private async adminLeases(request: Request): Promise<Response> {
+    return json({ leases: this.filterLeases(await this.leaseRecords(), request) });
+  }
+
+  private async adminLeaseRoute(
+    request: Request,
+    leaseID: string,
+    action?: string,
+  ): Promise<Response> {
+    if (request.method.toUpperCase() !== "POST") {
+      return json({ error: "not_found" }, { status: 404 });
+    }
+    if (action === "release") {
+      return this.releaseLease(request, leaseID);
+    }
+    if (action === "delete") {
+      return this.adminDeleteLease(leaseID);
+    }
+    return json({ error: "not_found" }, { status: 404 });
+  }
+
+  private async adminDeleteLease(leaseID: string): Promise<Response> {
+    const lease = await this.requireLease(leaseID);
+    if (lease.state === "active") {
+      await this.deleteLeaseServer(lease);
+    }
+    const now = new Date().toISOString();
+    lease.state = "released";
+    lease.updatedAt = now;
+    lease.releasedAt = now;
+    lease.endedAt = now;
+    lease.keep = false;
+    await this.putLease(lease);
+    return json({ lease });
+  }
+
+  private filterLeases(leases: LeaseRecord[], request: Request): LeaseRecord[] {
+    const url = new URL(request.url);
+    const state = url.searchParams.get("state") ?? "";
+    const owner = url.searchParams.get("owner") ?? "";
+    const org = url.searchParams.get("org") ?? "";
+    const limit = clampLimit(url.searchParams.get("limit"), 100);
+    return leases
+      .filter((lease) => !state || lease.state === state)
+      .filter((lease) => !owner || lease.owner === owner)
+      .filter((lease) => !org || lease.org === org)
+      .toSorted((a, b) => b.createdAt.localeCompare(a.createdAt))
+      .slice(0, limit);
+  }
+
+  private async createRun(request: Request): Promise<Response> {
+    const owner = requestOwner(request);
+    const org = requestOrg(request, this.env);
+    const input = await readJson<RunCreateRequest>(request);
+    if (!validLeaseID(input.leaseID)) {
+      return json({ error: "invalid_lease_id" }, { status: 400 });
+    }
+    const lease = await this.getLease(input.leaseID);
+    const now = new Date().toISOString();
+    const run: RunRecord = {
+      id: newRunID(),
+      leaseID: input.leaseID,
+      owner,
+      org,
+      provider: input.provider ?? lease?.provider ?? "hetzner",
+      class: input.class ?? lease?.class ?? "",
+      serverType: input.serverType ?? lease?.serverType ?? "",
+      command: Array.isArray(input.command) ? input.command.map(String) : [],
+      state: "running",
+      logBytes: 0,
+      logTruncated: false,
+      startedAt: now,
+    };
+    await this.putRun(run);
+    return json({ run }, { status: 201 });
+  }
+
+  private async runRoute(request: Request, runID: string, action?: string): Promise<Response> {
+    const method = request.method.toUpperCase();
+    if (method === "GET" && action === undefined) {
+      const run = await this.getRun(runID);
+      return run ? json({ run }) : json({ error: "not_found" }, { status: 404 });
+    }
+    if (method === "GET" && action === "logs") {
+      const run = await this.getRun(runID);
+      if (!run) {
+        return json({ error: "not_found" }, { status: 404 });
+      }
+      const log = (await this.state.storage.get<string>(runLogKey(runID))) ?? "";
+      return new Response(log, {
+        headers: { "content-type": "text/plain; charset=utf-8" },
+      });
+    }
+    if (method === "POST" && action === "finish") {
+      return this.finishRun(request, runID);
+    }
+    return json({ error: "not_found" }, { status: 404 });
+  }
+
+  private async finishRun(request: Request, runID: string): Promise<Response> {
+    const run = await this.requireRun(runID);
+    const input = await readJson<RunFinishRequest>(request);
+    const now = new Date();
+    const started = Date.parse(run.startedAt);
+    run.exitCode = Number.isFinite(input.exitCode) ? input.exitCode : 1;
+    const syncMs = finiteNumber(input.syncMs);
+    const commandMs = finiteNumber(input.commandMs);
+    if (syncMs !== undefined) {
+      run.syncMs = syncMs;
+    }
+    if (commandMs !== undefined) {
+      run.commandMs = commandMs;
+    }
+    if (Number.isFinite(started)) {
+      run.durationMs = now.getTime() - started;
+    }
+    run.state = run.exitCode === 0 ? "succeeded" : "failed";
+    run.endedAt = now.toISOString();
+    const log = input.log ?? "";
+    run.logBytes = new TextEncoder().encode(log).byteLength;
+    run.logTruncated = Boolean(input.logTruncated);
+    await this.state.storage.put(runLogKey(runID), log);
+    await this.putRun(run);
+    return json({ run });
+  }
+
+  private async listRuns(request: Request): Promise<Response> {
+    const url = new URL(request.url);
+    const leaseID = url.searchParams.get("leaseID") ?? "";
+    const owner = url.searchParams.get("owner") ?? "";
+    const org = url.searchParams.get("org") ?? "";
+    const state = url.searchParams.get("state") ?? "";
+    const limit = clampLimit(url.searchParams.get("limit"), 50);
+    const runs = await this.runRecords();
+    return json({
+      runs: runs
+        .filter((run) => !leaseID || run.leaseID === leaseID)
+        .filter((run) => !owner || run.owner === owner)
+        .filter((run) => !org || run.org === org)
+        .filter((run) => !state || run.state === state)
+        .toSorted((a, b) => b.startedAt.localeCompare(a.startedAt))
+        .slice(0, limit),
+    });
   }
 
   private async usage(request: Request): Promise<Response> {
@@ -234,6 +414,11 @@ export class FleetDurableObject implements DurableObject {
     return [...leases.values()];
   }
 
+  private async runRecords(): Promise<RunRecord[]> {
+    const runs = await this.state.storage.list<RunRecord>({ prefix: "run:" });
+    return [...runs.values()];
+  }
+
   private async requireLease(leaseID: string): Promise<LeaseRecord> {
     const lease = await this.getLease(leaseID);
     if (!lease) {
@@ -244,6 +429,22 @@ export class FleetDurableObject implements DurableObject {
 
   private async putLease(lease: LeaseRecord): Promise<void> {
     await this.state.storage.put(leaseKey(lease.id), lease);
+  }
+
+  private async getRun(runID: string): Promise<RunRecord | undefined> {
+    return this.state.storage.get<RunRecord>(runKey(runID));
+  }
+
+  private async requireRun(runID: string): Promise<RunRecord> {
+    const run = await this.getRun(runID);
+    if (!run) {
+      throw new Error(`run not found: ${runID}`);
+    }
+    return run;
+  }
+
+  private async putRun(run: RunRecord): Promise<void> {
+    await this.state.storage.put(runKey(run.id), run);
   }
 
   private provider(provider: Provider, region = "eu-west-1"): CloudProvider {
@@ -272,10 +473,24 @@ function leaseKey(leaseID: string): string {
   return `lease:${leaseID}`;
 }
 
+function runKey(runID: string): string {
+  return `run:${runID}`;
+}
+
+function runLogKey(runID: string): string {
+  return `runlog:${runID}`;
+}
+
 function newLeaseID(): string {
   const bytes = new Uint8Array(6);
   crypto.getRandomValues(bytes);
   return `cbx_${[...bytes].map((byte) => byte.toString(16).padStart(2, "0")).join("")}`;
+}
+
+function newRunID(): string {
+  const bytes = new Uint8Array(6);
+  crypto.getRandomValues(bytes);
+  return `run_${[...bytes].map((byte) => byte.toString(16).padStart(2, "0")).join("")}`;
 }
 
 function validLeaseID(value: string | undefined): value is string {
@@ -284,6 +499,18 @@ function validLeaseID(value: string | undefined): value is string {
 
 function validCrabboxProviderKey(value: string | undefined): value is string {
   return typeof value === "string" && /^crabbox-cbx-[a-f0-9]{12}$/.test(value);
+}
+
+function clampLimit(value: string | null, fallback: number): number {
+  const parsed = Number(value ?? "");
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return fallback;
+  }
+  return Math.min(Math.trunc(parsed), 500);
+}
+
+function finiteNumber(value: number | undefined): number | undefined {
+  return Number.isFinite(value) ? value : undefined;
 }
 
 function leaseTTLSeconds(lease: LeaseRecord): number {

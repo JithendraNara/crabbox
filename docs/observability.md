@@ -7,7 +7,7 @@ Read when:
 - finding a remote machine for SSH inspection;
 - correlating Actions hydration with the remote workspace.
 
-Crabbox currently exposes operational visibility through CLI commands, coordinator usage summaries, provider labels, GitHub Actions run links, and Worker logs. There is no central searchable log store yet; the reliable path is to combine the command output with the lease ID.
+Crabbox exposes operational visibility through CLI commands, coordinator usage summaries, retained run history/log tails, provider labels, GitHub Actions run links, and Worker logs. The reliable path is to keep the lease ID and run ID together.
 
 ## Lease State
 
@@ -38,12 +38,27 @@ Use `usage` for monthly summaries:
 
 ```sh
 bin/crabbox usage
-bin/crabbox usage --scope user --owner steipete@gmail.com
+bin/crabbox usage --scope user --user steipete@gmail.com
 bin/crabbox usage --scope org --org openclaw
 bin/crabbox usage --scope all --json
 ```
 
 Reports include lease count, active lease count, elapsed runtime, estimated elapsed cost, reserved worst-case cost, and breakdowns by owner, org, provider, and server type.
+
+## Run History And Logs
+
+Coordinator-backed `crabbox run` creates a run record before the remote command starts and finishes it with exit code, timing, and the latest retained output tail.
+
+Use:
+
+```sh
+bin/crabbox history
+bin/crabbox history --lease cbx_...
+bin/crabbox history --owner steipete@gmail.com --json
+bin/crabbox logs run_...
+```
+
+History is for command debugging, not unlimited log archival. Logs are bounded tails of remote stdout/stderr.
 
 ## Remote Debugging
 
@@ -95,8 +110,6 @@ Keep the lease ID, owner, org, provider, class, and request time when comparing 
 
 Current Crabbox observability is enough for maintainer operations, but not yet a full analytics product. Missing pieces:
 
-- persisted per-step timing;
-- searchable historical run logs;
 - structured test-result ingestion;
 - alerting on budget or failure-rate thresholds;
 - dashboard UI.

@@ -1,0 +1,127 @@
+package cli
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+)
+
+func (a App) admin(ctx context.Context, args []string) error {
+	if len(args) == 0 {
+		return exit(2, "usage: crabbox admin leases|release|delete")
+	}
+	switch args[0] {
+	case "leases":
+		return a.adminLeases(ctx, args[1:])
+	case "release":
+		return a.adminRelease(ctx, args[1:])
+	case "delete":
+		return a.adminDelete(ctx, args[1:])
+	default:
+		return exit(2, "unknown admin command %q", args[0])
+	}
+}
+
+func (a App) adminLeases(ctx context.Context, args []string) error {
+	fs := newFlagSet("admin leases", a.Stderr)
+	state := fs.String("state", "", "filter by state")
+	owner := fs.String("owner", "", "filter by owner")
+	org := fs.String("org", "", "filter by org")
+	limit := fs.Int("limit", 100, "maximum leases")
+	jsonOut := fs.Bool("json", false, "print JSON")
+	if err := parseFlags(fs, args); err != nil {
+		return err
+	}
+	coord, err := configuredCoordinator()
+	if err != nil {
+		return err
+	}
+	leases, err := coord.AdminLeases(ctx, *state, *owner, *org, *limit)
+	if err != nil {
+		return err
+	}
+	if *jsonOut {
+		return json.NewEncoder(a.Stdout).Encode(leases)
+	}
+	for _, lease := range leases {
+		fmt.Fprintf(a.Stdout, "%-16s %-8s %-10s %-14s %-24s owner=%s org=%s expires=%s\n",
+			lease.ID, lease.Provider, lease.State, lease.ServerType, lease.Host, lease.Owner, lease.Org, blank(lease.ExpiresAt, "-"))
+	}
+	return nil
+}
+
+func (a App) adminRelease(ctx context.Context, args []string) error {
+	fs := newFlagSet("admin release", a.Stderr)
+	id := fs.String("id", "", "lease id")
+	deleteServer := fs.Bool("delete", false, "delete server while releasing")
+	jsonOut := fs.Bool("json", false, "print JSON")
+	if err := parseFlags(fs, args); err != nil {
+		return err
+	}
+	if *id == "" && fs.NArg() > 0 {
+		*id = fs.Arg(0)
+	}
+	if *id == "" {
+		return exit(2, "usage: crabbox admin release --id <lease-id>")
+	}
+	coord, err := configuredCoordinator()
+	if err != nil {
+		return err
+	}
+	lease, err := coord.AdminReleaseLease(ctx, *id, *deleteServer)
+	if err != nil {
+		return err
+	}
+	if *jsonOut {
+		return json.NewEncoder(a.Stdout).Encode(lease)
+	}
+	fmt.Fprintf(a.Stdout, "released %s state=%s delete=%t\n", lease.ID, lease.State, *deleteServer)
+	return nil
+}
+
+func (a App) adminDelete(ctx context.Context, args []string) error {
+	fs := newFlagSet("admin delete", a.Stderr)
+	id := fs.String("id", "", "lease id")
+	force := fs.Bool("force", false, "confirm deletion")
+	jsonOut := fs.Bool("json", false, "print JSON")
+	if err := parseFlags(fs, args); err != nil {
+		return err
+	}
+	if *id == "" && fs.NArg() > 0 {
+		*id = fs.Arg(0)
+	}
+	if *id == "" {
+		return exit(2, "usage: crabbox admin delete --id <lease-id> --force")
+	}
+	if !*force {
+		return exit(2, "admin delete requires --force")
+	}
+	coord, err := configuredCoordinator()
+	if err != nil {
+		return err
+	}
+	lease, err := coord.AdminDeleteLease(ctx, *id)
+	if err != nil {
+		return err
+	}
+	if *jsonOut {
+		return json.NewEncoder(a.Stdout).Encode(lease)
+	}
+	fmt.Fprintf(a.Stdout, "deleted %s state=%s\n", lease.ID, lease.State)
+	return nil
+}
+
+func configuredCoordinator() (*CoordinatorClient, error) {
+	cfg, err := loadConfig()
+	if err != nil {
+		return nil, err
+	}
+	coord, ok, err := newCoordinatorClient(cfg)
+	if err != nil {
+		return nil, err
+	}
+	if !ok {
+		return nil, exit(2, "command requires a configured coordinator")
+	}
+	return coord, nil
+}

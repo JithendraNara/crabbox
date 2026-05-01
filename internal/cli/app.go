@@ -42,6 +42,18 @@ func (a App) Run(ctx context.Context, args []string) error {
 		return nil
 	case "doctor":
 		return a.doctor(ctx, args[1:])
+	case "login":
+		return a.login(ctx, args[1:])
+	case "logout":
+		return a.logout(ctx, args[1:])
+	case "whoami":
+		return a.whoami(ctx, args[1:])
+	case "admin":
+		return a.admin(ctx, args[1:])
+	case "history":
+		return a.history(ctx, args[1:])
+	case "logs":
+		return a.logs(ctx, args[1:])
 	case "config":
 		return a.config(ctx, args[1:])
 	case "init":
@@ -94,12 +106,18 @@ Start Here:
 
 Commands:
   init        Onboard the current repo for Crabbox
+  login       Store broker credentials and verify access
+  logout      Remove the stored broker token
+  whoami      Show broker identity
   doctor      Check local and broker/provider readiness
   warmup      Lease a box and wait until it is ready
   run         Sync the repo, run a remote command, stream output
+  history     List recorded remote runs
+  logs        Print recorded run logs
   status      Show lease state; add --wait to block until ready
   list        List Crabbox machines
   usage       Show cost and usage estimates by user, org, or fleet
+  admin       Lease admin controls for trusted operators
   actions     Register GitHub Actions runners or dispatch workflows
   ssh         Print the SSH command for a lease
   inspect     Print lease/provider details; add --json for scripts
@@ -114,7 +132,10 @@ Common Flows:
   crabbox run --id cbx_123 --shell 'pnpm install --frozen-lockfile && pnpm test'
   crabbox ssh --id cbx_123
   crabbox inspect --id cbx_123 --json
+  crabbox history --lease cbx_123
+  crabbox logs run_123
   crabbox usage --scope org
+  crabbox admin leases --state active
   crabbox warmup --actions-runner --idle-timeout 90m
   crabbox actions hydrate --id cbx_123
   crabbox actions dispatch -f testbox_id=cbx_123

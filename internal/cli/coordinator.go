@@ -26,6 +26,8 @@ type CoordinatorClient struct {
 type CoordinatorLease struct {
 	ID         string `json:"id"`
 	Provider   string `json:"provider"`
+	Owner      string `json:"owner"`
+	Org        string `json:"org"`
 	Profile    string `json:"profile"`
 	Class      string `json:"class"`
 	ServerType string `json:"serverType"`
@@ -55,6 +57,40 @@ type CoordinatorMachine struct {
 type CoordinatorUsageResponse struct {
 	Usage  CoordinatorUsageSummary `json:"usage"`
 	Limits CoordinatorCostLimits   `json:"limits"`
+}
+
+type CoordinatorWhoami struct {
+	Owner string `json:"owner"`
+	Org   string `json:"org"`
+	Auth  string `json:"auth"`
+}
+
+type CoordinatorRunsResponse struct {
+	Runs []CoordinatorRun `json:"runs"`
+}
+
+type CoordinatorRunResponse struct {
+	Run CoordinatorRun `json:"run"`
+}
+
+type CoordinatorRun struct {
+	ID           string   `json:"id"`
+	LeaseID      string   `json:"leaseID"`
+	Owner        string   `json:"owner"`
+	Org          string   `json:"org"`
+	Provider     string   `json:"provider"`
+	Class        string   `json:"class"`
+	ServerType   string   `json:"serverType"`
+	Command      []string `json:"command"`
+	State        string   `json:"state"`
+	ExitCode     *int     `json:"exitCode,omitempty"`
+	SyncMs       int64    `json:"syncMs,omitempty"`
+	CommandMs    int64    `json:"commandMs,omitempty"`
+	DurationMs   int64    `json:"durationMs,omitempty"`
+	LogBytes     int64    `json:"logBytes"`
+	LogTruncated bool     `json:"logTruncated"`
+	StartedAt    string   `json:"startedAt"`
+	EndedAt      string   `json:"endedAt,omitempty"`
 }
 
 type CoordinatorUsageSummary struct {
@@ -233,6 +269,115 @@ func (c *CoordinatorClient) Usage(ctx context.Context, scope, owner, org, month 
 	return res, err
 }
 
+func (c *CoordinatorClient) Whoami(ctx context.Context) (CoordinatorWhoami, error) {
+	var res CoordinatorWhoami
+	err := c.do(ctx, http.MethodGet, "/v1/whoami", nil, &res)
+	return res, err
+}
+
+func (c *CoordinatorClient) AdminLeases(ctx context.Context, state, owner, org string, limit int) ([]CoordinatorLease, error) {
+	var res struct {
+		Leases []CoordinatorLease `json:"leases"`
+	}
+	values := url.Values{}
+	if state != "" {
+		values.Set("state", state)
+	}
+	if owner != "" {
+		values.Set("owner", owner)
+	}
+	if org != "" {
+		values.Set("org", org)
+	}
+	if limit > 0 {
+		values.Set("limit", strconv.Itoa(limit))
+	}
+	path := "/v1/admin/leases"
+	if encoded := values.Encode(); encoded != "" {
+		path += "?" + encoded
+	}
+	err := c.do(ctx, http.MethodGet, path, nil, &res)
+	return res.Leases, err
+}
+
+func (c *CoordinatorClient) AdminReleaseLease(ctx context.Context, id string, deleteServer bool) (CoordinatorLease, error) {
+	var res struct {
+		Lease CoordinatorLease `json:"lease"`
+	}
+	err := c.do(ctx, http.MethodPost, "/v1/admin/leases/"+url.PathEscape(id)+"/release", map[string]any{"delete": deleteServer}, &res)
+	return res.Lease, err
+}
+
+func (c *CoordinatorClient) AdminDeleteLease(ctx context.Context, id string) (CoordinatorLease, error) {
+	var res struct {
+		Lease CoordinatorLease `json:"lease"`
+	}
+	err := c.do(ctx, http.MethodPost, "/v1/admin/leases/"+url.PathEscape(id)+"/delete", map[string]any{}, &res)
+	return res.Lease, err
+}
+
+func (c *CoordinatorClient) CreateRun(ctx context.Context, leaseID string, cfg Config, command []string) (CoordinatorRun, error) {
+	var res CoordinatorRunResponse
+	err := c.do(ctx, http.MethodPost, "/v1/runs", map[string]any{
+		"leaseID":    leaseID,
+		"provider":   cfg.Provider,
+		"class":      cfg.Class,
+		"serverType": cfg.ServerType,
+		"command":    command,
+	}, &res)
+	return res.Run, err
+}
+
+func (c *CoordinatorClient) FinishRun(ctx context.Context, runID string, exitCode int, sync, command time.Duration, log string, truncated bool) (CoordinatorRun, error) {
+	var res CoordinatorRunResponse
+	err := c.do(ctx, http.MethodPost, "/v1/runs/"+url.PathEscape(runID)+"/finish", map[string]any{
+		"exitCode":     exitCode,
+		"syncMs":       sync.Milliseconds(),
+		"commandMs":    command.Milliseconds(),
+		"log":          log,
+		"logTruncated": truncated,
+	}, &res)
+	return res.Run, err
+}
+
+func (c *CoordinatorClient) Runs(ctx context.Context, leaseID, owner, org, state string, limit int) ([]CoordinatorRun, error) {
+	var res CoordinatorRunsResponse
+	values := url.Values{}
+	if leaseID != "" {
+		values.Set("leaseID", leaseID)
+	}
+	if owner != "" {
+		values.Set("owner", owner)
+	}
+	if org != "" {
+		values.Set("org", org)
+	}
+	if state != "" {
+		values.Set("state", state)
+	}
+	if limit > 0 {
+		values.Set("limit", strconv.Itoa(limit))
+	}
+	path := "/v1/runs"
+	if encoded := values.Encode(); encoded != "" {
+		path += "?" + encoded
+	}
+	err := c.do(ctx, http.MethodGet, path, nil, &res)
+	return res.Runs, err
+}
+
+func (c *CoordinatorClient) Run(ctx context.Context, runID string) (CoordinatorRun, error) {
+	var res CoordinatorRunResponse
+	err := c.do(ctx, http.MethodGet, "/v1/runs/"+url.PathEscape(runID), nil, &res)
+	return res.Run, err
+}
+
+func (c *CoordinatorClient) RunLogs(ctx context.Context, runID string) (string, error) {
+	var buf bytes.Buffer
+	err := c.do(ctx, http.MethodGet, "/v1/runs/"+url.PathEscape(runID)+"/logs", nil, &buf)
+	return buf.String(), err
+}
+
 func (c *CoordinatorClient) Health(ctx context.Context) error {
 	var res map[string]any
 	return c.do(ctx, http.MethodGet, "/v1/health", nil, &res)
@@ -386,6 +531,10 @@ func decodeCoordinatorResponse(method, path string, statusCode int, body io.Read
 		return fmt.Errorf("coordinator %s %s: http %d", method, path, statusCode)
 	}
 	if out != nil {
+		if buf, ok := out.(*bytes.Buffer); ok {
+			_, err := io.Copy(buf, body)
+			return err
+		}
 		if err := json.NewDecoder(body).Decode(out); err != nil {
 			return err
 		}

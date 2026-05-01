@@ -251,12 +251,30 @@ afterSync:
 		defer setServerState(context.Background(), cfg, server, "ready", a.Stderr)
 	}
 	fmt.Fprintf(a.Stderr, "running on %s %s\n", target.Host, strings.Join(command, " "))
+	var runID string
+	if useCoordinator && leaseID != "" && coord != nil {
+		run, err := coord.CreateRun(ctx, leaseID, cfg, command)
+		if err != nil {
+			fmt.Fprintf(a.Stderr, "warning: run history create failed: %v\n", err)
+		} else {
+			runID = run.ID
+			fmt.Fprintf(a.Stderr, "recording run %s\n", runID)
+		}
+	}
 	remote := remoteCommandWithEnvFile(workdir, allowedEnv(cfg.EnvAllow), actionsEnvFile, command)
 	if *shellMode || shouldUseShell(command) {
 		remote = remoteShellCommandWithEnvFile(workdir, allowedEnv(cfg.EnvAllow), actionsEnvFile, strings.Join(command, " "))
 	}
-	code := runSSHStream(ctx, target, remote, a.Stdout, a.Stderr)
+	var logBuffer runLogBuffer
+	stdout := io.MultiWriter(a.Stdout, &logBuffer)
+	stderr := io.MultiWriter(a.Stderr, &logBuffer)
+	code := runSSHStream(ctx, target, remote, stdout, stderr)
 	timings.command = time.Since(commandStart)
+	if runID != "" {
+		if _, err := coord.FinishRun(context.Background(), runID, code, timings.sync, timings.command, logBuffer.String(), logBuffer.Truncated()); err != nil {
+			fmt.Fprintf(a.Stderr, "warning: run history finish failed for %s: %v\n", runID, err)
+		}
+	}
 	fmt.Fprintf(a.Stderr, "command complete in %s total=%s\n", timings.command.Round(time.Millisecond), time.Since(timings.started).Round(time.Millisecond))
 	if code != 0 {
 		return ExitError{Code: code, Message: fmt.Sprintf("remote command exited %d", code)}

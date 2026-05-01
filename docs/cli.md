@@ -25,18 +25,26 @@ Primary output goes to stdout. Progress, diagnostics, and errors go to stderr. J
 
 ```text
 crabbox doctor
+crabbox login --url <url> --token-stdin [--provider hetzner|aws]
+crabbox logout
+crabbox whoami [--json]
 crabbox init [--force]
 crabbox config show [--json]
 crabbox config path
 crabbox config set-broker --url <url> --token-stdin [--provider hetzner|aws]
 crabbox warmup [--provider hetzner|aws] [--profile <name>] [--idle-timeout <duration>]
 crabbox run [--id <lease-id>] [--shell] [--checksum] [--debug] -- <command...>
+crabbox history [--lease <lease-id>] [--owner <email>] [--org <name>] [--limit <n>] [--json]
+crabbox logs <run-id> [--json]
 crabbox actions hydrate --id <lease-id> [--workflow <file|name|id>] [--wait-timeout <duration>]
 crabbox actions register --id <lease-id> [--repo owner/name]
 crabbox actions dispatch [--workflow <file|name|id>] [-f key=value]
 crabbox status --id <lease-id> [--wait]
 crabbox list [--json]
 crabbox usage [--scope user|org|all] [--user <email>] [--org <name>] [--month YYYY-MM] [--json]
+crabbox admin leases [--state active|released|expired|failed] [--owner <email>] [--org <name>] [--json]
+crabbox admin release <lease-id> [--delete]
+crabbox admin delete <lease-id> --force
 crabbox ssh --id <lease-id>
 crabbox inspect --id <lease-id> [--json]
 crabbox stop <lease-id>
@@ -103,8 +111,24 @@ Debug config:
 
 ```sh
 crabbox doctor
+crabbox whoami
 crabbox config show
 crabbox config show --json
+```
+
+Inspect recorded runs:
+
+```sh
+crabbox history --lease cbx_123
+crabbox logs run_123
+```
+
+Trusted operator lease controls:
+
+```sh
+crabbox admin leases --state active
+crabbox admin release cbx_123
+crabbox admin delete cbx_123 --force
 ```
 
 ## `run`
@@ -120,7 +144,7 @@ Behavior:
 5. Sync current repo, unless a matching sync fingerprint lets Crabbox skip rsync.
 6. Seed remote Git from the configured origin/base ref before first sync when possible.
 7. Run command over SSH.
-8. Stream remote output.
+8. Stream remote output and retain the latest log tail in coordinator history.
 9. Heartbeat coordinator leases in the background.
 10. Release lease unless `--keep` is set.
 11. Exit with the remote command exit code.
@@ -199,11 +223,13 @@ ssh:
 Set broker auth without putting the token in shell history:
 
 ```sh
-printf '%s' "$TOKEN" | crabbox config set-broker \
+printf '%s' "$TOKEN" | crabbox login \
   --url https://crabbox-coordinator.steipete.workers.dev \
   --provider aws \
   --token-stdin
 ```
+
+`crabbox config set-broker` remains available for scripts that only want to edit config without verifying identity.
 
 Repo-local config is YAML and should hold project-specific choices:
 

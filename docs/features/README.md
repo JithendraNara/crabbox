@@ -18,6 +18,8 @@ Core features:
 - [Actions hydration](actions-hydration.md): let GitHub Actions prepare a runner, then sync local work into that workspace.
 - [SSH keys](ssh-keys.md): per-lease keys, provider key cleanup, and local storage.
 - [Cost and usage](cost-usage.md): guardrails, provider-backed pricing, and reporting.
+- [History and logs](history-logs.md): coordinator run records and retained remote output tails.
+- [Auth and admin](auth-admin.md): login/logout/whoami and trusted operator controls.
 - [Lifecycle cleanup](lifecycle-cleanup.md): release, expiry, keep mode, and direct cleanup.
 - [Repository onboarding](repository-onboarding.md): `crabbox init`, repo config, workflow stub, and agent skill.
 
@@ -27,6 +29,8 @@ Command docs:
 - [init](../commands/init.md)
 - [warmup](../commands/warmup.md)
 - [run](../commands/run.md)
+- [history](../commands/history.md)
+- [logs](../commands/logs.md)
 - [status](../commands/status.md)
 - [list](../commands/list.md)
 - [usage](../commands/usage.md)
@@ -36,3 +40,7 @@ Command docs:
 - [actions](../commands/actions.md)
 - [cleanup](../commands/cleanup.md)
 - [config](../commands/config.md)
+- [login](../commands/login.md)
+- [logout](../commands/logout.md)
+- [whoami](../commands/whoami.md)
+- [admin](../commands/admin.md)
