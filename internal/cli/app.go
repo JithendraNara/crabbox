@@ -141,7 +141,7 @@ Common Flows:
   crabbox run --id blue-lobster --shell 'pnpm install --frozen-lockfile && pnpm test'
   crabbox ssh --id blue-lobster
   crabbox inspect --id blue-lobster --json
-  crabbox history --lease cbx_123
+  crabbox history --lease cbx_abcdef123456
   crabbox logs run_123
   crabbox results run_123
   crabbox cache stats --id blue-lobster
@@ -149,7 +149,7 @@ Common Flows:
   crabbox admin leases --state active
   crabbox warmup --actions-runner
   crabbox actions hydrate --id blue-lobster
-  crabbox actions dispatch -f testbox_id=cbx_123
+  crabbox actions dispatch -f testbox_id=cbx_abcdef123456
   crabbox stop blue-lobster
 
 Global:

@@ -4,7 +4,7 @@ Crabbox is an open source remote testbox runner for maintainers and agents. It g
 
 The current implementation is a Go CLI plus a Cloudflare Worker/Durable Object coordinator. The CLI uses the coordinator for brokered Hetzner or AWS EC2 Spot leases, with direct provider calls kept as a debug fallback.
 
-Documentation lives in [`docs/`](docs/README.md). Start with [How Crabbox Works](docs/how-it-works.md) for the end-to-end mental model. The GitHub Pages site is generated from those Markdown files with a small dependency-free builder:
+Documentation lives in [`docs/`](docs/README.md). Start with [How Crabbox Works](docs/how-it-works.md) for the end-to-end mental model, and use [Source Map](docs/source-map.md) to trace docs back to implementation files. The GitHub Pages site is generated from those Markdown files with a small dependency-free builder:
 
 ```sh
 node scripts/build-docs-site.mjs
@@ -445,6 +445,7 @@ The release workflow needs `HOMEBREW_TAP_GITHUB_TOKEN` with write access to that
 - [docs/cli.md](docs/cli.md)
 - [docs/commands/README.md](docs/commands/README.md)
 - [docs/infrastructure.md](docs/infrastructure.md)
+- [docs/source-map.md](docs/source-map.md)
 - [docs/mvp-plan.md](docs/mvp-plan.md)
 - [docs/security.md](docs/security.md)
 - [CHANGELOG.md](CHANGELOG.md)

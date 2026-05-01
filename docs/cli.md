@@ -132,7 +132,7 @@ Inspect recorded runs:
 
 ```sh
 crabbox run --id blue-lobster --junit junit.xml -- go test ./...
-crabbox history --lease cbx_123
+crabbox history --lease cbx_abcdef123456
 crabbox logs run_123
 crabbox results run_123
 ```
@@ -150,7 +150,7 @@ Trusted operator lease controls:
 ```sh
 crabbox admin leases --state active
 crabbox admin release blue-lobster
-crabbox admin delete cbx_123 --force
+crabbox admin delete cbx_abcdef123456 --force
 ```
 
 ## `run`
@@ -171,7 +171,7 @@ Behavior:
 10. Release lease unless `--keep` is set.
 11. Exit with the remote command exit code.
 
-Fresh non-kept leases retry once with a new machine when bootstrap never reaches SSH readiness. Existing leases and `--keep` runs are not retried automatically, so commands are not duplicated on a machine the user asked to keep. Runner bootstrap also retries apt, NodeSource, and corepack steps inside cloud-init before `crabbox-ready` is allowed to pass.
+Fresh non-kept leases retry once with a new machine when bootstrap never reaches SSH readiness. Existing leases and `--keep` runs are not retried automatically, so commands are not duplicated on a machine the user asked to keep. Runner bootstrap retries apt and installs only Crabbox plumbing before `crabbox-ready` is allowed to pass.
 
 Flags:
 
@@ -312,16 +312,34 @@ CRABBOX_COORDINATOR_TOKEN
 CRABBOX_PROVIDER
 CRABBOX_PROFILE
 CRABBOX_CONFIG
+CRABBOX_DEFAULT_CLASS
+CRABBOX_SERVER_TYPE
 CRABBOX_IDLE_TIMEOUT
 CRABBOX_TTL
 CRABBOX_SSH_KEY
+CRABBOX_SSH_USER
+CRABBOX_SSH_PORT
+CRABBOX_WORK_ROOT
+CRABBOX_ACTIONS_WORKFLOW
+CRABBOX_ACTIONS_JOB
+CRABBOX_ACTIONS_REF
+CRABBOX_ACTIONS_REPO
+CRABBOX_ACTIONS_RUNNER_VERSION
+CRABBOX_ACTIONS_RUNNER_LABELS
+CRABBOX_ACTIONS_EPHEMERAL
 CRABBOX_RESULTS_JUNIT
+CRABBOX_SYNC_CHECKSUM
+CRABBOX_SYNC_DELETE
+CRABBOX_SYNC_GIT_SEED
+CRABBOX_SYNC_FINGERPRINT
+CRABBOX_SYNC_BASE_REF
 CRABBOX_SYNC_TIMEOUT
 CRABBOX_SYNC_WARN_FILES
 CRABBOX_SYNC_WARN_BYTES
 CRABBOX_SYNC_FAIL_FILES
 CRABBOX_SYNC_FAIL_BYTES
 CRABBOX_SYNC_ALLOW_LARGE
+CRABBOX_ENV_ALLOW
 CRABBOX_CACHE_PNPM/NPM/DOCKER/GIT
 CRABBOX_CACHE_MAX_GB
 CRABBOX_CACHE_PURGE_ON_RELEASE
@@ -344,18 +362,18 @@ Human output:
 
 ```text
 acquiring lease profile=project-check ttl=90m
-leased cbx_abc123 slug=blue-lobster provider=aws server=i-0123 type=c7a.48xlarge ip=203.0.113.10 idle_timeout=30m0s expires=2026-05-01T17:30:00Z
-syncing 184 files -> /work/crabbox/cbx_abc123/openclaw
+leased cbx_abcdef123456 slug=blue-lobster provider=aws server=i-0123 type=c7a.48xlarge ip=203.0.113.10 idle_timeout=30m0s expires=2026-05-01T17:30:00Z
+syncing 184 files -> /work/crabbox/cbx_abcdef123456/openclaw
 running pnpm check:changed
 ...
-released cbx_abc123
+released cbx_abcdef123456
 ```
 
 JSON output:
 
 ```json
 {
-  "leaseId": "cbx_abc123",
+  "leaseId": "cbx_abcdef123456",
   "machineId": "hz-ccx33-01",
   "state": "released",
   "exitCode": 0

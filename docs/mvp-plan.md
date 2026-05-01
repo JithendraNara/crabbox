@@ -1,5 +1,7 @@
 # MVP Plan
 
+This is the historical MVP design record. For current implementation ownership, use [Source Map](source-map.md); for user-facing behavior, use [How Crabbox Works](how-it-works.md), [CLI](cli.md), and [Features](features/README.md).
+
 ## Goal
 
 Build Crabbox as a Go CLI plus Cloudflare coordinator that lets trusted OpenClaw maintainers run local worktrees on shared remote machines with a fast local-agent loop:
@@ -24,8 +26,8 @@ Primary agent loop:
 
 ```sh
 crabbox warmup --profile openclaw-check
-crabbox run --id cbx_123 -- pnpm check:changed
-crabbox stop cbx_123
+crabbox run --id cbx_abcdef123456 -- pnpm check:changed
+crabbox stop cbx_abcdef123456
 ```
 
 Expected user experience:
@@ -55,12 +57,11 @@ Crabbox MVP runs commands over SSH on owned cloud capacity. Actions-backed hydra
 
 ## Repositories
 
-Use two repos:
+Current implementation lives in one repo:
 
-- `openclaw/crabbox`: Go CLI, Worker coordinator, docs, deploy scripts.
-- `openclaw/crabbox-fleet`: desired fleet config only.
+- `openclaw/crabbox`: Go CLI, Worker coordinator, docs, release/deploy scripts, and the OpenClaw plugin package.
 
-The fleet repo is not a lock database. It stores profiles, machine classes, default TTLs, sync excludes, and backend declarations. Live lease state belongs in Cloudflare Durable Objects.
+A separate desired-state fleet repo can still exist later, but it is not part of the current 0.1.0 implementation. Live lease state belongs in Cloudflare Durable Objects.
 
 ## MVP Components
 
@@ -77,19 +78,19 @@ Build in this order:
    - Flags override env.
    - Env overrides repo-local `crabbox.yaml`.
    - Repo-local config overrides user config.
-   - User config overrides shared fleet config.
-   - Shared fleet config can be fetched from GitHub raw content or local checkout.
+   - Defaults fill anything unset.
 
 3. Coordinator API
-   - Cloudflare Worker validates Cloudflare Access JWT.
+   - Cloudflare Worker validates shared bearer-token auth for non-health routes.
+   - Cloudflare Access can protect custom routes in front of the Worker.
    - Durable Object owns lease state and atomic machine selection.
-   - Worker calls Hetzner API for create/delete/status.
+   - Worker calls Hetzner and AWS APIs for create/delete/status.
    - Worker exposes JSON API under `/v1`.
 
 4. Lease lifecycle
    - `POST /v1/leases` acquires or provisions.
-   - `POST /v1/leases/{id}/heartbeat` keeps lease alive.
-   - `POST /v1/leases/{id}/release` releases or deletes.
+   - `POST /v1/leases/{id-or-slug}/heartbeat` keeps lease alive.
+   - `POST /v1/leases/{id-or-slug}/release` releases or deletes.
    - Durable Object alarm reaps expired leases.
    - Machines have states: `idle`, `leased`, `draining`, `provisioning`, `failed`.
 
@@ -112,7 +113,7 @@ Build in this order:
 7. Hetzner backend
    - Create machines from configured image.
    - Attach configured SSH key.
-   - Apply labels: `crabbox=true`, `profile=...`, `lease=...`, `owner=...`.
+   - Apply labels: `crabbox=true`, `profile=...`, `lease=...`, `slug=...`, `owner=...`, `last_touched_at=...`, `idle_timeout_secs=...`, `ttl_secs=...`, `expires_at=...`.
    - Support warm static pool and ephemeral overflow.
    - Implement cleanup for stale ephemeral machines.
 
@@ -155,7 +156,7 @@ And proves:
 - Remote command output streams.
 - The local exit code matches the remote command exit code.
 - Lease is released on success/failure.
-- Expired leases are cleaned by TTL.
+- Expired leases are cleaned by idle timeout and TTL cap.
 - Machine pool state is visible through `crabbox pool`.
 
 ## Non-Goals For MVP
@@ -198,7 +199,6 @@ And proves:
 1. Raise Hetzner dedicated-core quota so `beast` can use `ccx63` instead of falling back to `cpx62`.
 2. Replace shared-token login with Cloudflare Access/GitHub OAuth user tokens.
 3. Add Cloudflare Access service-token support for non-browser CLI use on `crabbox.clawd.bot`.
-4. Add heartbeat support for long-running commands.
-5. Add one-shot `run --profile` cleanup semantics coverage in integration tests.
-6. Add coordinator admin cleanup/drain endpoints.
-7. Re-run OpenClaw `pnpm test:changed:max` on `ccx63` and compare against the current Crabbox baseline.
+4. Add one-shot `run --profile` cleanup semantics coverage in integration tests.
+5. Add coordinator drain controls beyond release/delete.
+6. Re-run OpenClaw `pnpm test:changed:max` on `ccx63` and compare against the current Crabbox baseline.

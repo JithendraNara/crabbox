@@ -1,6 +1,6 @@
 # warmup
 
-`crabbox warmup` provisions or leases a remote box and waits until SSH and the toolchain are ready.
+`crabbox warmup` provisions or leases a remote box and waits until SSH and Crabbox bootstrap plumbing are ready.
 
 ```sh
 crabbox warmup --class beast

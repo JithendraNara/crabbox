@@ -24,6 +24,7 @@ Core features:
 - [Auth and admin](auth-admin.md): login/logout/whoami and trusted operator controls.
 - [Lifecycle cleanup](lifecycle-cleanup.md): release, expiry, keep mode, and direct cleanup.
 - [Repository onboarding](repository-onboarding.md): `crabbox init`, repo config, workflow stub, and agent skill.
+- [Source map](../source-map.md): implementation files behind documented behavior.
 
 Command docs:
 

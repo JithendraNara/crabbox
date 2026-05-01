@@ -130,6 +130,6 @@ Before handing off:
 - `go test ./...`
 - Worker format, lint, typecheck, tests, and build.
 - `node scripts/build-docs-site.mjs`
-- docs link check.
+- docs link check, when a link checker is available.
 - `git diff --check`
 - live `crabbox doctor` if broker credentials are available.

@@ -2,19 +2,25 @@
 
 ## Current Intended Setup
 
-Primary public endpoint:
+Canonical Worker endpoint:
 
 ```text
-https://crabbox.openclaw.ai
+https://crabbox-coordinator.steipete.workers.dev
 ```
 
-Current deployable Cloudflare fallback:
+Cloudflare Access protected route:
 
 ```text
 https://crabbox.clawd.bot
 ```
 
-Reason for the fallback: `openclaw.ai` currently resolves through Namecheap nameservers and is not visible as a Cloudflare zone in the available Cloudflare account. Cloudflare Workers custom domains are simplest when the zone is managed by Cloudflare.
+Intended future product endpoint:
+
+```text
+https://crabbox.openclaw.ai
+```
+
+The Worker route is the stable automation endpoint today. `crabbox.clawd.bot/*` is attached for Access-protected browser/user flows. Move to `crabbox.openclaw.ai` once that zone is available in Cloudflare.
 
 ## Cloudflare
 
@@ -104,7 +110,7 @@ HCLOUD_TOKEN
 HETZNER_TOKEN
 ```
 
-MVP defaults:
+Direct Hetzner defaults:
 
 ```yaml
 provider: hetzner-main
@@ -123,8 +129,13 @@ crabbox=true
 profile=openclaw-check
 class=ccx33
 lease=cbx_...
+slug=blue-lobster
 owner=<github-login-or-email>
-ttl=<timestamp>
+created_at=<unix-seconds>
+last_touched_at=<unix-seconds>
+ttl_secs=<seconds>
+idle_timeout_secs=<seconds>
+expires_at=<unix-seconds>
 ```
 
 Current direct-CLI status:
@@ -218,51 +229,18 @@ classes:
 
 Profiles choose a default class, and commands can override with `--class`.
 
-## Fleet Repo
-
-`openclaw/crabbox-fleet` should contain:
-
-```text
-fleet.yaml
-profiles/openclaw.yaml
-bootstrap/cloud-init.yaml
-images/README.md
-```
-
-It should not contain secrets or live lease data.
-
-Example:
-
-```json
-{
-  "profile": "project-check",
-  "class": "fast",
-  "sync": {
-    "delete": true,
-    "checksum": false,
-    "gitSeed": true,
-    "fingerprint": true,
-    "baseRef": "main",
-    "exclude": ["node_modules", ".turbo", "dist"]
-  },
-  "env": {
-    "allow": ["CI", "NODE_OPTIONS", "PROJECT_*"]
-  }
-}
-```
-
 ## Deployment
 
-MVP deploy command:
+Worker source lives in `worker/`. Build and deploy with the package scripts plus Wrangler:
 
 ```sh
-crabbox admin deploy-coordinator
-```
-
-Or a script first:
-
-```sh
-scripts/deploy-worker
+npm ci --prefix worker
+npm run format:check --prefix worker
+npm run lint --prefix worker
+npm run check --prefix worker
+npm test --prefix worker
+npm run build --prefix worker
+npx wrangler deploy --config worker/wrangler.jsonc
 ```
 
 Deployment should:
@@ -288,6 +266,9 @@ Current Worker secrets:
 
 ```text
 HETZNER_TOKEN
+AWS_ACCESS_KEY_ID
+AWS_SECRET_ACCESS_KEY
+AWS_SESSION_TOKEN optional
 CRABBOX_SHARED_TOKEN
 ```
 

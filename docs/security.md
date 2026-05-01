@@ -13,15 +13,15 @@ Assumptions:
 
 ## Authentication
 
-Cloudflare Access protects the coordinator.
+Cloudflare Access can protect custom coordinator routes. The Worker also enforces bearer-token auth for every non-health route.
 
 MVP:
 
 - One-time PIN Access remains available for early fallback.
 - GitHub Access IdP is configured for the `openclaw` org.
-- Coordinator validates `Cf-Access-Jwt-Assertion`.
-- Coordinator maps Access identity to lease owner.
-- Workers.dev automation currently uses a shared bearer token. `crabbox login` stores and verifies that token; browser-based Cloudflare Access/GitHub OAuth and split user/admin tokens are still future hardening.
+- Workers.dev automation uses a shared bearer token. `crabbox login` stores and verifies that token.
+- The CLI sends owner/org headers in bearer-token mode; Cloudflare Access identity mapping is future hardening for browser/user flows.
+- Browser-based Cloudflare Access/GitHub OAuth and split user/admin tokens are still future hardening.
 - Missing shared-token config fails closed for non-health coordinator routes.
 
 Target:
@@ -125,14 +125,16 @@ Store only operational metadata:
 
 Do not store:
 
-- stdout/stderr logs in the coordinator for MVP.
-- env values.
-- file contents.
+- unbounded stdout/stderr logs in the coordinator;
+- env values;
+- file contents;
 - SSH keys.
 
-## Audit Trail
+Coordinator run records keep bounded stdout/stderr tails and optional structured JUnit summaries for debugging.
 
-Durable Object events should record:
+## Future Audit Trail
+
+Durable Object run and lease records already provide operational history. A fuller event audit trail should record:
 
 ```text
 lease.created

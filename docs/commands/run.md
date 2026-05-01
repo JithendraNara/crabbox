@@ -6,7 +6,7 @@
 crabbox run --id blue-lobster -- pnpm test:changed:max
 crabbox run --class beast -- pnpm check
 crabbox run --id blue-lobster --shell 'pnpm install --frozen-lockfile && pnpm test'
-crabbox run --id cbx_123 --junit junit.xml -- go test ./...
+crabbox run --id cbx_abcdef123456 --junit junit.xml -- go test ./...
 ```
 
 If `--id` is omitted, Crabbox creates a fresh non-kept lease and releases it when the command exits. `--id` accepts the stable `cbx_...` ID or the active friendly slug.
