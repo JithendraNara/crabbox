@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -111,6 +112,61 @@ func TestCoordinatorTouchAndUpdateHeartbeatBodies(t *testing.T) {
 	}
 	if len(bodies) != 2 || bodies[0] != "{}" || !strings.Contains(bodies[1], `"idleTimeoutSeconds":2700`) {
 		t.Fatalf("heartbeat bodies=%q", bodies)
+	}
+}
+
+func TestCoordinatorCreateLeaseSendsAWSSSHCIDRs(t *testing.T) {
+	var body struct {
+		AWSSSHCIDRs []string `json:"awsSSHCIDRs"`
+	}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost || r.URL.Path != "/v1/leases" {
+			t.Fatalf("unexpected request %s %s", r.Method, r.URL.Path)
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			t.Fatal(err)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"lease":{"id":"cbx_123","provider":"aws","state":"active","host":"192.0.2.10"}}`))
+	}))
+	defer server.Close()
+
+	client := CoordinatorClient{BaseURL: server.URL, Client: server.Client()}
+	_, err := client.CreateLease(context.Background(), Config{
+		Provider:    "aws",
+		AWSSSHCIDRs: []string{"198.51.100.7/32"},
+	}, "ssh-ed25519 test", false, "cbx_123", "blue-crab")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(body.AWSSSHCIDRs) != 1 || body.AWSSSHCIDRs[0] != "198.51.100.7/32" {
+		t.Fatalf("awsSSHCIDRs=%v", body.AWSSSHCIDRs)
+	}
+}
+
+func TestLeaseStatusRequiresSSHReadiness(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet || r.URL.Path != "/v1/leases/cbx_123" {
+			t.Fatalf("unexpected request %s %s", r.Method, r.URL.Path)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"lease":{"id":"cbx_123","slug":"blue-crab","provider":"aws","state":"active","serverType":"c7a.8xlarge","host":"127.0.0.1","sshUser":"ubuntu","sshPort":"22"}}`))
+	}))
+	defer server.Close()
+
+	state, err := (App{}).leaseStatus(context.Background(), Config{
+		Coordinator: server.URL,
+		Provider:    "aws",
+		SSHKey:      filepath.Join(t.TempDir(), "missing-key"),
+	}, "cbx_123")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !state.HasHost {
+		t.Fatalf("HasHost=false, want true")
+	}
+	if state.Ready {
+		t.Fatalf("Ready=true, want false when ssh readiness probe fails")
 	}
 }
 
