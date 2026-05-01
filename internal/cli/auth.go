@@ -167,7 +167,10 @@ func (a App) loginWithGitHub(ctx context.Context, brokerURL, provider string, no
 }
 
 func coordinatorClientForLogin(brokerURL string) (*CoordinatorClient, error) {
-	cfg := baseConfig()
+	cfg, err := loadConfig()
+	if err != nil {
+		return nil, err
+	}
 	cfg.Coordinator = brokerURL
 	cfg.CoordToken = ""
 	coord, ok, err := newCoordinatorClient(cfg)

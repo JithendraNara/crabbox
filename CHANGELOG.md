@@ -43,6 +43,7 @@ Crabbox 0.2.0 hardens the brokered runner path after real AWS and Blacksmith Tes
 - Added the canonical coordinator endpoint configured for OAuth callback generation.
 - Added Blacksmith Testbox workflow flags for `crabbox warmup` and `crabbox run`, enabling one-command Testbox runs without repo YAML or environment variables.
 - Added configurable SSH fallback ports via `ssh.fallbackPorts` and `CRABBOX_SSH_FALLBACK_PORTS`.
+- Added Cloudflare Access service-token headers for coordinator CLI requests. Thanks @stainlu.
 
 ### Changed
 

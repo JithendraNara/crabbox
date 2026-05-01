@@ -63,12 +63,20 @@ func TestGitHubLoginNoBrowserStoresReturnedToken(t *testing.T) {
 	t.Setenv("CRABBOX_COORDINATOR", "")
 	t.Setenv("CRABBOX_COORDINATOR_TOKEN", "")
 	t.Setenv("CRABBOX_PROVIDER", "")
+	t.Setenv("CRABBOX_ACCESS_CLIENT_ID", "access-client")
+	t.Setenv("CRABBOX_ACCESS_CLIENT_SECRET", "access-secret")
 
 	var seenPollSecretHash string
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		switch r.URL.Path {
 		case "/v1/auth/github/start":
+			if got := r.Header.Get("CF-Access-Client-Id"); got != "access-client" {
+				t.Fatalf("start CF-Access-Client-Id=%q", got)
+			}
+			if got := r.Header.Get("CF-Access-Client-Secret"); got != "access-secret" {
+				t.Fatalf("start CF-Access-Client-Secret=%q", got)
+			}
 			var body struct {
 				PollSecretHash string `json:"pollSecretHash"`
 				Provider       string `json:"provider"`
@@ -89,6 +97,12 @@ func TestGitHubLoginNoBrowserStoresReturnedToken(t *testing.T) {
 				ExpiresAt: time.Now().Add(time.Minute).Format(time.RFC3339),
 			})
 		case "/v1/auth/github/poll":
+			if got := r.Header.Get("CF-Access-Client-Id"); got != "access-client" {
+				t.Fatalf("poll CF-Access-Client-Id=%q", got)
+			}
+			if got := r.Header.Get("CF-Access-Client-Secret"); got != "access-secret" {
+				t.Fatalf("poll CF-Access-Client-Secret=%q", got)
+			}
 			var body struct {
 				LoginID    string `json:"loginID"`
 				PollSecret string `json:"pollSecret"`
@@ -113,6 +127,12 @@ func TestGitHubLoginNoBrowserStoresReturnedToken(t *testing.T) {
 		case "/v1/whoami":
 			if got := r.Header.Get("Authorization"); got != "Bearer github-session-token" {
 				t.Fatalf("authorization=%q", got)
+			}
+			if got := r.Header.Get("CF-Access-Client-Id"); got != "access-client" {
+				t.Fatalf("whoami CF-Access-Client-Id=%q", got)
+			}
+			if got := r.Header.Get("CF-Access-Client-Secret"); got != "access-secret" {
+				t.Fatalf("whoami CF-Access-Client-Secret=%q", got)
 			}
 			_ = json.NewEncoder(w).Encode(CoordinatorWhoami{
 				Owner: "friend@example.com",
