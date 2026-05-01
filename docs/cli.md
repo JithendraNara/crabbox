@@ -30,9 +30,10 @@ crabbox config show [--json]
 crabbox config path
 crabbox config set-broker --url <url> --token-stdin [--provider hetzner|aws]
 crabbox warmup [--provider hetzner|aws] [--profile <name>] [--idle-timeout <duration>]
-crabbox run [--id <lease-id>] [--debug] -- <command...>
+crabbox run [--id <lease-id>] [--shell] [--checksum] [--debug] -- <command...>
 crabbox status --id <lease-id> [--wait]
 crabbox list [--json]
+crabbox usage [--scope user|org|all] [--user <email>] [--org <name>] [--month YYYY-MM] [--json]
 crabbox ssh --id <lease-id>
 crabbox inspect --id <lease-id> [--json]
 crabbox stop <lease-id>
@@ -44,7 +45,7 @@ crabbox cleanup [--dry-run]
 One-shot run:
 
 ```sh
-crabbox run --profile openclaw-check -- pnpm check:changed
+crabbox run --profile project-check -- pnpm check:changed
 ```
 
 AWS EC2 Spot run:
@@ -56,8 +57,9 @@ crabbox run --class beast -- pnpm check:changed
 Warm a box, then reuse it:
 
 ```sh
-crabbox warmup --profile openclaw-check --idle-timeout 90m
+crabbox warmup --profile project-check --idle-timeout 90m
 crabbox run --id cbx_123 -- pnpm test:changed
+crabbox run --id cbx_123 --shell 'pnpm install --frozen-lockfile && pnpm test'
 crabbox stop cbx_123
 ```
 
@@ -66,6 +68,14 @@ Inspect pool:
 ```sh
 crabbox list
 crabbox list --json
+```
+
+Inspect usage and estimated cost:
+
+```sh
+crabbox usage
+crabbox usage --scope org --org openclaw
+crabbox usage --scope all --json
 ```
 
 Cleanup direct-provider leftovers:
@@ -94,8 +104,8 @@ Behavior:
 1. Load config.
 2. Acquire a lease unless `--id` is provided.
 3. Verify SSH readiness.
-4. Sync current repo.
-5. Verify SSH readiness again after sync and before command execution. The configured SSH port is preferred, with port 22 as a bootstrap fallback when the runner exposes default SSH first.
+4. Sync current repo, unless a matching sync fingerprint lets Crabbox skip rsync.
+5. Seed remote Git from the configured origin/base ref before first sync when possible.
 6. Run command over SSH.
 7. Stream remote output.
 8. Heartbeat coordinator leases in the background.
@@ -117,6 +127,8 @@ Flags:
 --no-sync               run without syncing
 --sync-only             sync and exit
 --keep                  keep lease after command exits
+--shell                 run the command string through bash -lc
+--checksum              use checksum rsync instead of size/time
 --debug                 print sync timing and itemized rsync output
 ```
 
@@ -158,7 +170,7 @@ User config:
     "provider": "aws",
     "token": "..."
   },
-  "profile": "openclaw-check",
+  "profile": "project-check",
   "class": "beast",
   "aws": {
     "region": "eu-west-1",
@@ -181,22 +193,24 @@ printf '%s' "$TOKEN" | crabbox config set-broker \
   --token-stdin
 ```
 
-Future fleet config may become YAML:
+Repo-local config is JSON and should hold project-specific choices:
 
-```yaml
-version: 1
-defaults:
-  profile: openclaw-check
-  ttl: 90m
-sync:
-  exclude:
-    - node_modules
-    - .turbo
-    - .git/lfs
-env:
-  allow:
-    - OPENCLAW_*
-    - NODE_OPTIONS
+```json
+{
+  "profile": "project-check",
+  "class": "beast",
+  "sync": {
+    "delete": true,
+    "checksum": false,
+    "gitSeed": true,
+    "fingerprint": true,
+    "baseRef": "main",
+    "exclude": ["node_modules", ".turbo", "dist"]
+  },
+  "env": {
+    "allow": ["CI", "NODE_OPTIONS", "PROJECT_*"]
+  }
+}
 ```
 
 ## Environment Variables
@@ -226,7 +240,7 @@ GITHUB_TOKEN
 Human output:
 
 ```text
-acquiring lease profile=openclaw-check ttl=90m
+acquiring lease profile=project-check ttl=90m
 leased cbx_abc123 machine=hz-ccx33-01 expires=2026-04-30T17:30:00Z
 syncing 184 files -> /work/crabbox/cbx_abc123/openclaw
 running pnpm check:changed

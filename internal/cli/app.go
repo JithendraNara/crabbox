@@ -21,13 +21,13 @@ func Run(ctx context.Context, args []string) error {
 
 func (a App) Run(ctx context.Context, args []string) error {
 	if len(args) == 0 {
-		a.usage()
+		a.printHelp()
 		return exit(2, "missing command")
 	}
 
 	switch args[0] {
 	case "-h", "--help":
-		a.usage()
+		a.printHelp()
 		return nil
 	case "help":
 		if len(args) > 1 {
@@ -35,7 +35,7 @@ func (a App) Run(ctx context.Context, args []string) error {
 			next = append(next, "--help")
 			return a.Run(ctx, next)
 		}
-		a.usage()
+		a.printHelp()
 		return nil
 	case "-v", "--version", "version":
 		fmt.Fprintln(a.Stdout, version)
@@ -52,6 +52,8 @@ func (a App) Run(ctx context.Context, args []string) error {
 		return a.machine(ctx, args[1:])
 	case "list":
 		return a.list(ctx, args[1:])
+	case "usage":
+		return a.usage(ctx, args[1:])
 	case "cleanup":
 		return a.cleanup(ctx, args[1:])
 	case "warmup":
@@ -71,7 +73,7 @@ func (a App) Run(ctx context.Context, args []string) error {
 	}
 }
 
-func (a App) usage() {
+func (a App) printHelp() {
 	fmt.Fprintln(a.Stdout, `Crabbox leases remote Linux test boxes, syncs your dirty checkout, runs commands, and cleans up.
 
 Usage:
@@ -95,6 +97,7 @@ Commands:
   run         Sync the repo, run a remote command, stream output
   status      Show lease state; add --wait to block until ready
   list        List Crabbox machines
+  usage       Show cost and usage estimates by user, org, or fleet
   ssh         Print the SSH command for a lease
   inspect     Print lease/provider details; add --json for scripts
   stop        Release a lease or delete a direct-provider machine
@@ -105,8 +108,10 @@ Common Flows:
   crabbox run --class beast -- pnpm check
   crabbox warmup --idle-timeout 90m
   crabbox status --id cbx_123 --wait
+  crabbox run --id cbx_123 --shell 'pnpm install --frozen-lockfile && pnpm test'
   crabbox ssh --id cbx_123
   crabbox inspect --id cbx_123 --json
+  crabbox usage --scope org
   crabbox stop cbx_123
 
 Global:
@@ -122,6 +127,8 @@ Environment:
   CRABBOX_COORDINATOR          Broker URL
   CRABBOX_COORDINATOR_TOKEN    Broker bearer token
   CRABBOX_PROVIDER             hetzner or aws
+  CRABBOX_OWNER                Usage owner override
+  CRABBOX_ORG                  Usage org override
   CRABBOX_CONFIG               Optional config path
   CRABBOX_AWS_REGION           Default eu-west-1
   HCLOUD_TOKEN/HETZNER_TOKEN   Direct Hetzner mode

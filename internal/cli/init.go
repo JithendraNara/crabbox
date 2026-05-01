@@ -51,6 +51,24 @@ func projectConfigTemplate(repoName string) string {
 	return fmt.Sprintf(`{
   "profile": "%s-check",
   "class": "beast",
+  "sync": {
+    "delete": true,
+    "checksum": false,
+    "gitSeed": true,
+    "fingerprint": true,
+    "exclude": [
+      ".cache",
+      ".turbo",
+      "dist",
+      "node_modules"
+    ]
+  },
+  "env": {
+    "allow": [
+      "CI",
+      "NODE_OPTIONS"
+    ]
+  },
   "ssh": {
     "user": "crabbox",
     "port": "2222"

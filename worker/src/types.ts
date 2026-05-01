@@ -11,6 +11,14 @@ export interface Env {
   CRABBOX_AWS_INSTANCE_PROFILE?: string;
   CRABBOX_AWS_ROOT_GB?: string;
   CRABBOX_SHARED_TOKEN?: string;
+  CRABBOX_DEFAULT_ORG?: string;
+  CRABBOX_COST_RATES_JSON?: string;
+  CRABBOX_MAX_ACTIVE_LEASES?: string;
+  CRABBOX_MAX_ACTIVE_LEASES_PER_OWNER?: string;
+  CRABBOX_MAX_ACTIVE_LEASES_PER_ORG?: string;
+  CRABBOX_MAX_MONTHLY_USD?: string;
+  CRABBOX_MAX_MONTHLY_USD_PER_OWNER?: string;
+  CRABBOX_MAX_MONTHLY_USD_PER_ORG?: string;
 }
 
 export interface LeaseRequest {
@@ -44,6 +52,7 @@ export interface LeaseRecord {
   cloudID: string;
   region?: string;
   owner: string;
+  org: string;
   profile: string;
   class: string;
   serverType: string;
@@ -56,10 +65,14 @@ export interface LeaseRecord {
   workRoot: string;
   keep: boolean;
   ttlSeconds: number;
+  estimatedHourlyUSD: number;
+  maxEstimatedUSD: number;
   state: "active" | "released" | "expired" | "failed";
   createdAt: string;
   updatedAt: string;
   expiresAt: string;
+  releasedAt?: string;
+  endedAt?: string;
 }
 
 export interface HetznerServer {

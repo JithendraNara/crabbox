@@ -77,6 +77,15 @@ func runSSHQuiet(ctx context.Context, target SSHTarget, remote string) error {
 	return cmd.Run()
 }
 
+func runSSHOutput(ctx context.Context, target SSHTarget, remote string) (string, error) {
+	cmd := exec.CommandContext(ctx, "ssh", sshArgs(target, remote)...)
+	out, err := cmd.Output()
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(string(out)), nil
+}
+
 func runSSHStream(ctx context.Context, target SSHTarget, remote string, stdout, stderr io.Writer) int {
 	cmd := exec.CommandContext(ctx, "ssh", sshArgs(target, remote)...)
 	cmd.Stdout = stdout
@@ -111,12 +120,14 @@ func sshArgs(target SSHTarget, remote string) []string {
 }
 
 type rsyncOptions struct {
-	Debug bool
+	Debug    bool
+	Delete   bool
+	Checksum bool
 }
 
 func rsync(ctx context.Context, target SSHTarget, src, dst string, excludes []string, stdout, stderr io.Writer, opts rsyncOptions) error {
 	args := []string{
-		"-az", "--delete", "--checksum",
+		"-az",
 		"-e", strings.Join([]string{
 			"ssh",
 			"-i", shellQuote(target.Key),
@@ -129,6 +140,12 @@ func rsync(ctx context.Context, target SSHTarget, src, dst string, excludes []st
 			"-o", "ServerAliveCountMax=2",
 			"-p", shellQuote(target.Port),
 		}, " "),
+	}
+	if opts.Delete {
+		args = append(args, "--delete")
+	}
+	if opts.Checksum {
+		args = append(args, "--checksum")
 	}
 	for _, exclude := range excludes {
 		args = append(args, "--exclude", exclude)
@@ -143,7 +160,7 @@ func rsync(ctx context.Context, target SSHTarget, src, dst string, excludes []st
 	cmd.Stderr = stderr
 	err := cmd.Run()
 	if opts.Debug {
-		fmt.Fprintf(stderr, "rsync elapsed=%s checksum=true\n", time.Since(start).Round(time.Millisecond))
+		fmt.Fprintf(stderr, "rsync elapsed=%s checksum=%t delete=%t\n", time.Since(start).Round(time.Millisecond), opts.Checksum, opts.Delete)
 	}
 	return err
 }
@@ -180,6 +197,22 @@ func remoteCommand(workdir string, env map[string]string, command []string) stri
 	return b.String()
 }
 
+func remoteShellCommand(workdir string, env map[string]string, script string) string {
+	var b strings.Builder
+	b.WriteString("cd ")
+	b.WriteString(shellQuote(workdir))
+	b.WriteString(" && ")
+	for k, v := range env {
+		b.WriteString(k)
+		b.WriteByte('=')
+		b.WriteString(shellQuote(v))
+		b.WriteByte(' ')
+	}
+	b.WriteString("bash -lc ")
+	b.WriteString(shellQuote(script))
+	return b.String()
+}
+
 func shellWords(words []string) []string {
 	out := make([]string, 0, len(words))
 	for _, w := range words {
@@ -192,11 +225,45 @@ func remoteMkdir(workdir string) string {
 	return "mkdir -p " + shellQuote(workdir)
 }
 
-func remoteGitHydrate(workdir string) string {
+func remoteGitHydrate(workdir, baseRef string) string {
+	if baseRef == "" {
+		return "true"
+	}
 	return "cd " + shellQuote(workdir) + " && " +
 		"if git rev-parse --is-inside-work-tree >/dev/null 2>&1 && git remote get-url origin >/dev/null 2>&1; then " +
-		"git fetch --quiet --unshallow origin main || git fetch --quiet --depth=1000 origin main || git fetch --quiet origin main || true; " +
+		"git fetch --quiet --unshallow origin " + shellQuote(baseRef) + " || git fetch --quiet --depth=1000 origin " + shellQuote(baseRef) + " || git fetch --quiet origin " + shellQuote(baseRef) + " || true; " +
 		"fi"
+}
+
+func remoteGitSeed(workdir, remoteURL, head string) string {
+	remoteURL = normalizeGitRemoteURL(remoteURL)
+	if remoteURL == "" || head == "" {
+		return "true"
+	}
+	parent := filepath.ToSlash(filepath.Dir(workdir))
+	return "if [ ! -d " + shellQuote(workdir+"/.git") + " ]; then " +
+		"mkdir -p " + shellQuote(parent) + "; " +
+		"tmp=$(mktemp -d " + shellQuote(parent+"/.seed.XXXXXX") + "); " +
+		"if git clone --quiet --filter=blob:none --no-checkout " + shellQuote(remoteURL) + " \"$tmp\" >/dev/null 2>&1; then " +
+		"(cd \"$tmp\" && (git fetch --quiet --depth=1 origin " + shellQuote(head) + " || true) && (git checkout --quiet " + shellQuote(head) + " || git checkout --quiet FETCH_HEAD || true)); " +
+		"rm -rf " + shellQuote(workdir) + " && mv \"$tmp\" " + shellQuote(workdir) + "; " +
+		"else rm -rf \"$tmp\"; fi; " +
+		"fi"
+}
+
+func normalizeGitRemoteURL(remoteURL string) string {
+	if strings.HasPrefix(remoteURL, "git@github.com:") {
+		return "https://github.com/" + strings.TrimSuffix(strings.TrimPrefix(remoteURL, "git@github.com:"), ".git") + ".git"
+	}
+	return remoteURL
+}
+
+func remoteReadSyncFingerprint(workdir string) string {
+	return "cat " + shellQuote(workdir+"/.crabbox/sync-fingerprint") + " 2>/dev/null || true"
+}
+
+func remoteWriteSyncFingerprint(workdir, fingerprint string) string {
+	return "mkdir -p " + shellQuote(workdir+"/.crabbox") + " && printf %s " + shellQuote(fingerprint) + " > " + shellQuote(workdir+"/.crabbox/sync-fingerprint")
 }
 
 func remoteSyncSanity(workdir string, allowMassDeletions bool) string {

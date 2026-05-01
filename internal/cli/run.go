@@ -76,6 +76,8 @@ func (a App) runCommand(ctx context.Context, args []string) error {
 	noSync := fs.Bool("no-sync", false, "skip rsync")
 	syncOnly := fs.Bool("sync-only", false, "sync and exit")
 	debugSync := fs.Bool("debug", false, "print detailed sync timing")
+	shellMode := fs.Bool("shell", false, "run command through the remote shell")
+	checksumSync := fs.Bool("checksum", false, "use checksum rsync instead of size/time")
 	if err := parseFlags(fs, args); err != nil {
 		return err
 	}
@@ -103,6 +105,9 @@ func (a App) runCommand(ctx context.Context, args []string) error {
 	cfg.TTL = *ttl
 	if flagWasSet(fs, "idle-timeout") {
 		cfg.TTL = *idleTimeout
+	}
+	if flagWasSet(fs, "checksum") {
+		cfg.Sync.Checksum = *checksumSync
 	}
 	if cfg.TTL <= 0 {
 		return exit(2, "idle timeout must be positive")
@@ -160,8 +165,13 @@ func (a App) runCommand(ctx context.Context, args []string) error {
 	if err != nil {
 		return err
 	}
+	if cfg.Sync.BaseRef == "" {
+		cfg.Sync.BaseRef = repo.BaseRef
+	}
+	timings := runTimings{started: time.Now()}
 	workdir := filepath.ToSlash(filepath.Join(cfg.WorkRoot, leaseID, repo.Name))
 	if !*noSync {
+		syncStart := time.Now()
 		fmt.Fprintf(a.Stderr, "syncing %s -> %s:%s\n", repo.Root, target.Host, workdir)
 		if err := waitForSSHReady(ctx, &target, a.Stderr, "before sync", 2*time.Minute); err != nil {
 			return err
@@ -169,24 +179,49 @@ func (a App) runCommand(ctx context.Context, args []string) error {
 		if err := runSSHQuiet(ctx, target, remoteMkdir(workdir)); err != nil {
 			return exit(7, "create remote workdir: %v", err)
 		}
-		if err := rsync(ctx, target, repo.Root, workdir, defaultExcludes(), a.Stdout, a.Stderr, rsyncOptions{Debug: *debugSync}); err != nil {
+		fingerprint := ""
+		if cfg.Sync.Fingerprint {
+			fingerprint, err = syncFingerprint(repo, cfg)
+			if err != nil {
+				fmt.Fprintf(a.Stderr, "warning: sync fingerprint failed: %v\n", err)
+			} else if fingerprint != "" {
+				remoteFingerprint, err := runSSHOutput(ctx, target, remoteReadSyncFingerprint(workdir))
+				if err == nil && remoteFingerprint == fingerprint {
+					timings.sync = time.Since(syncStart)
+					fmt.Fprintf(a.Stderr, "No changes detected, skipping sync (%s)\n", timings.sync.Round(time.Millisecond))
+					goto afterSync
+				}
+			}
+		}
+		if cfg.Sync.GitSeed {
+			if err := runSSHQuiet(ctx, target, remoteGitSeed(workdir, repo.RemoteURL, repo.Head)); err != nil {
+				fmt.Fprintf(a.Stderr, "warning: remote git seed failed: %v\n", err)
+			}
+		}
+		if err := rsync(ctx, target, repo.Root, workdir, configuredExcludes(cfg), a.Stdout, a.Stderr, rsyncOptions{Debug: *debugSync, Delete: cfg.Sync.Delete, Checksum: cfg.Sync.Checksum}); err != nil {
 			return exit(6, "rsync failed: %v", err)
 		}
-		if err := waitForSSHReady(ctx, &target, a.Stderr, "after sync", 2*time.Minute); err != nil {
-			return err
-		}
-		if err := runSSHQuiet(ctx, target, remoteSyncSanity(workdir, os.Getenv("OPENCLAW_TESTBOX_ALLOW_MASS_DELETIONS") == "1")); err != nil {
+		if err := runSSHQuiet(ctx, target, remoteSyncSanity(workdir, os.Getenv("CRABBOX_ALLOW_MASS_DELETIONS") == "1")); err != nil {
 			return exit(6, "remote sync sanity failed: %v", err)
 		}
-		if err := runSSHQuiet(ctx, target, remoteGitHydrate(workdir)); err != nil {
+		if err := runSSHQuiet(ctx, target, remoteGitHydrate(workdir, cfg.Sync.BaseRef)); err != nil {
 			fmt.Fprintf(a.Stderr, "warning: remote git hydrate failed: %v\n", err)
 		}
+		if fingerprint != "" {
+			if err := runSSHQuiet(ctx, target, remoteWriteSyncFingerprint(workdir, fingerprint)); err != nil {
+				fmt.Fprintf(a.Stderr, "warning: write sync fingerprint failed: %v\n", err)
+			}
+		}
+		timings.sync = time.Since(syncStart)
+		fmt.Fprintf(a.Stderr, "sync complete in %s\n", timings.sync.Round(time.Millisecond))
 	}
+afterSync:
 	if *syncOnly {
 		fmt.Fprintf(a.Stdout, "synced %s\n", workdir)
 		return nil
 	}
 
+	commandStart := time.Now()
 	if err := waitForSSHReady(ctx, &target, a.Stderr, "before command", 2*time.Minute); err != nil {
 		return err
 	}
@@ -195,11 +230,36 @@ func (a App) runCommand(ctx context.Context, args []string) error {
 		defer setServerState(context.Background(), cfg, server, "ready", a.Stderr)
 	}
 	fmt.Fprintf(a.Stderr, "running on %s %s\n", target.Host, strings.Join(command, " "))
-	code := runSSHStream(ctx, target, remoteCommand(workdir, allowedEnv(), command), a.Stdout, a.Stderr)
+	remote := remoteCommand(workdir, allowedEnv(cfg.EnvAllow), command)
+	if *shellMode || shouldUseShell(command) {
+		remote = remoteShellCommand(workdir, allowedEnv(cfg.EnvAllow), strings.Join(command, " "))
+	}
+	code := runSSHStream(ctx, target, remote, a.Stdout, a.Stderr)
+	timings.command = time.Since(commandStart)
+	fmt.Fprintf(a.Stderr, "command complete in %s total=%s\n", timings.command.Round(time.Millisecond), time.Since(timings.started).Round(time.Millisecond))
 	if code != 0 {
 		return ExitError{Code: code, Message: fmt.Sprintf("remote command exited %d", code)}
 	}
 	return nil
+}
+
+type runTimings struct {
+	started time.Time
+	sync    time.Duration
+	command time.Duration
+}
+
+func shouldUseShell(command []string) bool {
+	if len(command) == 1 {
+		return strings.ContainsAny(command[0], "&|;<>*$`")
+	}
+	for _, word := range command {
+		switch word {
+		case "&&", "||", ";", "|", ">", ">>", "<", "2>", "2>>":
+			return true
+		}
+	}
+	return false
 }
 
 func (a App) acquireCoordinator(ctx context.Context, cfg Config, coord *CoordinatorClient, keep bool) (Server, SSHTarget, string, error) {

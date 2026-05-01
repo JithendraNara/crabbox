@@ -12,6 +12,8 @@ Initial Crabbox release.
 - Brokered lease flow with heartbeats, TTL expiry, release, pool listing, and status lookup.
 - Direct-provider fallback mode for Hetzner and AWS debugging.
 - Commands: `init`, `doctor`, `warmup`, `run`, `status`, `list`, `ssh`, `inspect`, `stop`, `cleanup`, and `config`.
+- Usage command for estimated cost and runtime reporting by user, org, or fleet.
+- Orchestrator cost guardrails for active leases and monthly reserved spend.
 - Compatibility aliases: `release`, `pool list`, and `machine cleanup`.
 - Per-lease SSH key generation under the user config directory.
 - Per-lease cloud SSH key/key-pair cleanup when machines are deleted.

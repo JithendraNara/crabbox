@@ -31,6 +31,17 @@ type Config struct {
 	ProviderKey string
 	WorkRoot    string
 	TTL         time.Duration
+	Sync        SyncConfig
+	EnvAllow    []string
+}
+
+type SyncConfig struct {
+	Excludes    []string
+	Delete      bool
+	Checksum    bool
+	GitSeed     bool
+	Fingerprint bool
+	BaseRef     string
 }
 
 func defaultConfig() Config {
@@ -65,7 +76,7 @@ func baseConfig() Config {
 	class := "beast"
 	provider := "hetzner"
 	return Config{
-		Profile:     "openclaw-check",
+		Profile:     "default",
 		Provider:    provider,
 		Class:       class,
 		ServerType:  "",
@@ -79,6 +90,13 @@ func baseConfig() Config {
 		ProviderKey: "crabbox-steipete",
 		WorkRoot:    "/work/crabbox",
 		TTL:         90 * time.Minute,
+		Sync: SyncConfig{
+			Delete:      true,
+			Checksum:    false,
+			GitSeed:     true,
+			Fingerprint: true,
+		},
+		EnvAllow: []string{"CI", "NODE_OPTIONS"},
 	}
 }
 
@@ -93,6 +111,8 @@ type fileConfig struct {
 	Hetzner          *fileHetznerConfig `json:"hetzner,omitempty"`
 	AWS              *fileAWSConfig     `json:"aws,omitempty"`
 	SSH              *fileSSHConfig     `json:"ssh,omitempty"`
+	Sync             *fileSyncConfig    `json:"sync,omitempty"`
+	Env              *fileEnvConfig     `json:"env,omitempty"`
 	WorkRoot         string             `json:"workRoot,omitempty"`
 }
 
@@ -121,6 +141,20 @@ type fileSSHConfig struct {
 	User string `json:"user,omitempty"`
 	Key  string `json:"key,omitempty"`
 	Port string `json:"port,omitempty"`
+}
+
+type fileSyncConfig struct {
+	Exclude     []string `json:"exclude,omitempty"`
+	Excludes    []string `json:"excludes,omitempty"`
+	Delete      *bool    `json:"delete,omitempty"`
+	Checksum    *bool    `json:"checksum,omitempty"`
+	GitSeed     *bool    `json:"gitSeed,omitempty"`
+	Fingerprint *bool    `json:"fingerprint,omitempty"`
+	BaseRef     string   `json:"baseRef,omitempty"`
+}
+
+type fileEnvConfig struct {
+	Allow []string `json:"allow,omitempty"`
 }
 
 func configPaths() []string {
@@ -268,6 +302,28 @@ func applyFileConfig(cfg *Config, file fileConfig) {
 	if file.WorkRoot != "" {
 		cfg.WorkRoot = file.WorkRoot
 	}
+	if file.Sync != nil {
+		cfg.Sync.Excludes = appendUniqueStrings(cfg.Sync.Excludes, file.Sync.Exclude...)
+		cfg.Sync.Excludes = appendUniqueStrings(cfg.Sync.Excludes, file.Sync.Excludes...)
+		if file.Sync.Delete != nil {
+			cfg.Sync.Delete = *file.Sync.Delete
+		}
+		if file.Sync.Checksum != nil {
+			cfg.Sync.Checksum = *file.Sync.Checksum
+		}
+		if file.Sync.GitSeed != nil {
+			cfg.Sync.GitSeed = *file.Sync.GitSeed
+		}
+		if file.Sync.Fingerprint != nil {
+			cfg.Sync.Fingerprint = *file.Sync.Fingerprint
+		}
+		if file.Sync.BaseRef != "" {
+			cfg.Sync.BaseRef = file.Sync.BaseRef
+		}
+	}
+	if file.Env != nil && len(file.Env.Allow) > 0 {
+		cfg.EnvAllow = appendUniqueStrings(nil, file.Env.Allow...)
+	}
 }
 
 func applyEnv(cfg *Config) {
@@ -290,6 +346,22 @@ func applyEnv(cfg *Config) {
 	cfg.SSHPort = getenv("CRABBOX_SSH_PORT", cfg.SSHPort)
 	cfg.ProviderKey = getenv("CRABBOX_HETZNER_SSH_KEY", cfg.ProviderKey)
 	cfg.WorkRoot = getenv("CRABBOX_WORK_ROOT", cfg.WorkRoot)
+	if value, ok := getenvBool("CRABBOX_SYNC_CHECKSUM"); ok {
+		cfg.Sync.Checksum = value
+	}
+	if value, ok := getenvBool("CRABBOX_SYNC_DELETE"); ok {
+		cfg.Sync.Delete = value
+	}
+	if value, ok := getenvBool("CRABBOX_SYNC_GIT_SEED"); ok {
+		cfg.Sync.GitSeed = value
+	}
+	if value, ok := getenvBool("CRABBOX_SYNC_FINGERPRINT"); ok {
+		cfg.Sync.Fingerprint = value
+	}
+	cfg.Sync.BaseRef = getenv("CRABBOX_SYNC_BASE_REF", cfg.Sync.BaseRef)
+	if envAllow := os.Getenv("CRABBOX_ENV_ALLOW"); envAllow != "" {
+		cfg.EnvAllow = splitCommaList(envAllow)
+	}
 }
 
 func expandUserPath(path string) string {
@@ -366,4 +438,45 @@ func getenvInt(name string, fallback int) int {
 		return fallback
 	}
 	return n
+}
+
+func getenvBool(name string) (bool, bool) {
+	v := strings.TrimSpace(os.Getenv(name))
+	if v == "" {
+		return false, false
+	}
+	switch strings.ToLower(v) {
+	case "1", "true", "yes", "on":
+		return true, true
+	case "0", "false", "no", "off":
+		return false, true
+	default:
+		return false, false
+	}
+}
+
+func splitCommaList(value string) []string {
+	parts := strings.Split(value, ",")
+	out := make([]string, 0, len(parts))
+	for _, part := range parts {
+		part = strings.TrimSpace(part)
+		if part != "" {
+			out = append(out, part)
+		}
+	}
+	return out
+}
+
+func appendUniqueStrings(values []string, extra ...string) []string {
+	seen := map[string]bool{}
+	out := make([]string, 0, len(values)+len(extra))
+	for _, value := range append(values, extra...) {
+		value = strings.TrimSpace(value)
+		if value == "" || seen[value] {
+			continue
+		}
+		seen[value] = true
+		out = append(out, value)
+	}
+	return out
 }

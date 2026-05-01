@@ -51,6 +51,17 @@ func (a App) configShow(args []string) error {
 		"sshUser":     cfg.SSHUser,
 		"sshPort":     cfg.SSHPort,
 		"workRoot":    cfg.WorkRoot,
+		"sync": map[string]any{
+			"exclude":     configuredExcludes(cfg),
+			"delete":      cfg.Sync.Delete,
+			"checksum":    cfg.Sync.Checksum,
+			"gitSeed":     cfg.Sync.GitSeed,
+			"fingerprint": cfg.Sync.Fingerprint,
+			"baseRef":     cfg.Sync.BaseRef,
+		},
+		"env": map[string]any{
+			"allow": cfg.EnvAllow,
+		},
 		"hetzner": map[string]any{
 			"location": cfg.Location,
 			"image":    cfg.Image,
@@ -72,6 +83,8 @@ func (a App) configShow(args []string) error {
 	fmt.Fprintf(a.Stdout, "provider=%s class=%s type=%s profile=%s\n", cfg.Provider, cfg.Class, cfg.ServerType, cfg.Profile)
 	fmt.Fprintf(a.Stdout, "broker=%s auth=%s\n", blank(cfg.Coordinator, "-"), tokenState(cfg.CoordToken))
 	fmt.Fprintf(a.Stdout, "ssh=%s@<host>:%s key=%s\n", cfg.SSHUser, cfg.SSHPort, cfg.SSHKey)
+	fmt.Fprintf(a.Stdout, "sync delete=%t checksum=%t git_seed=%t fingerprint=%t base_ref=%s excludes=%d\n", cfg.Sync.Delete, cfg.Sync.Checksum, cfg.Sync.GitSeed, cfg.Sync.Fingerprint, blank(cfg.Sync.BaseRef, "-"), len(configuredExcludes(cfg)))
+	fmt.Fprintf(a.Stdout, "env allow=%s\n", strings.Join(cfg.EnvAllow, ","))
 	fmt.Fprintf(a.Stdout, "aws region=%s root_gb=%d\n", cfg.AWSRegion, cfg.AWSRootGB)
 	return nil
 }

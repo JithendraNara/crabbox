@@ -10,6 +10,7 @@ import (
 func (a App) doctor(ctx context.Context, args []string) error {
 	fs := newFlagSet("doctor", a.Stderr)
 	provider := fs.String("provider", defaultConfig().Provider, "provider: hetzner or aws")
+	id := fs.String("id", "", "remote lease id to inspect")
 	if err := parseFlags(fs, args); err != nil {
 		return err
 	}
@@ -30,6 +31,17 @@ func (a App) doctor(ctx context.Context, args []string) error {
 		return err
 	}
 	cfg.Provider = *provider
+	if *id != "" {
+		_, target, _, err := a.resolveLeaseTarget(ctx, cfg, *id)
+		if err != nil {
+			return err
+		}
+		out, err := runSSHOutput(ctx, target, "printf 'node='; node -v; printf 'pnpm='; pnpm --version; printf 'corepack='; corepack --version; printf 'git='; git --version; printf 'rsync='; rsync --version | head -1; printf 'docker='; docker --version")
+		if err != nil {
+			return exit(7, "remote doctor failed for %s: %v", *id, err)
+		}
+		fmt.Fprintf(a.Stdout, "ok      remote  %s\n%s\n", *id, out)
+	}
 	if os.Getenv("CRABBOX_SERVER_TYPE") == "" {
 		cfg.ServerType = serverTypeForProviderClass(cfg.Provider, cfg.Class)
 	}

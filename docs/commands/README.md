@@ -7,6 +7,7 @@ Crabbox is the testbox. Commands stay top-level rather than nested under `testbo
 - [run](run.md)
 - [status](status.md)
 - [list](list.md)
+- [usage](usage.md)
 - [ssh](ssh.md)
 - [inspect](inspect.md)
 - [stop](stop.md)

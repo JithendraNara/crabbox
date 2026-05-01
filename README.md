@@ -1,6 +1,6 @@
 # Crabbox
 
-Crabbox is an open source remote testbox runner for OpenClaw maintainers. It gives a Blacksmith Testboxes-style local loop on owned cloud capacity: provision or reuse a warm Linux box, sync the current dirty checkout, run a command remotely, stream output, and clean up.
+Crabbox is an open source remote testbox runner for maintainers and agents. It gives a Blacksmith Testboxes-style local loop on owned cloud capacity: provision or reuse a warm Linux box, sync the current dirty checkout, run a command remotely, stream output, and clean up.
 
 The current implementation is a Go CLI plus a Cloudflare Worker/Durable Object coordinator. The CLI uses the coordinator for brokered Hetzner or AWS EC2 Spot leases, with direct provider calls kept as a debug fallback.
 
@@ -28,7 +28,7 @@ developer laptop
 leased runner
 ```
 
-The **CLI** is the user-facing tool. It loads config from `~/.config/crabbox/config.json` or the macOS user config path, creates a per-lease SSH key, asks the broker for a lease, waits for SSH, rsyncs the current checkout with checksum/delete semantics, rechecks SSH readiness, runs the requested command, streams output, and releases the lease unless `--keep` is set. SSH prefers the configured port and can fall back to port 22 during bootstrap.
+The **CLI** is the user-facing tool. It loads config from `~/.config/crabbox/config.json`, repo-local `crabbox.json` or `.crabbox.json`, creates a per-lease SSH key, asks the broker for a lease, waits for SSH, seeds remote Git when possible, skips sync when the local/remote fingerprint matches, rsyncs the current checkout, runs the requested command, streams output, and releases the lease unless `--keep` is set. SSH prefers the configured port and can fall back to port 22 during bootstrap.
 
 The **broker** is the Cloudflare Worker at `crabbox-coordinator.steipete.workers.dev`. It authenticates requests with `CRABBOX_SHARED_TOKEN`, routes all fleet operations through a single Durable Object, and owns cloud-provider credentials. Local machines do not need AWS or Hetzner API keys for the normal path.
 
@@ -47,8 +47,8 @@ The normal lifecycle is:
 2. CLI sends `POST /v1/leases` with provider, class, TTL, SSH public key, and bootstrap options.
 3. Worker creates a Hetzner server or AWS Spot instance and stores the lease.
 4. CLI waits for `crabbox-ready` over SSH.
-5. CLI rsyncs the dirty local checkout into `/work/crabbox/<lease>/<repo>`.
-6. CLI runs sync sanity checks and hydrates shallow Git history.
+5. CLI seeds remote Git when possible, then rsyncs the dirty local checkout into `/work/crabbox/<lease>/<repo>`.
+6. CLI records sync fingerprints, runs sync sanity checks, and hydrates configured base-ref history.
 7. CLI runs the command over SSH and returns the remote exit code.
 8. CLI releases the lease; the broker terminates the machine unless it was kept.
 
@@ -64,6 +64,7 @@ Working today:
 - `crabbox run`
 - `crabbox status`
 - `crabbox list`
+- `crabbox usage`
 - `crabbox ssh`
 - `crabbox inspect`
 - `crabbox stop`
@@ -76,10 +77,12 @@ Working today:
 - Hetzner server provisioning with class fallback
 - AWS EC2 Spot provisioning with class fallback
 - cloud-init bootstrap for Node 24, pnpm, Docker, Git, and rsync, with apt/corepack retries
-- checksum rsync overlay of local dirty worktrees
+- Git-seeded rsync overlay of local dirty worktrees
+- sync fingerprint skip for no-change hot runs
 - per-lease SSH keys under the Crabbox config directory
+- coordinator cost guardrails and monthly usage summaries
 - sync sanity checks for mass tracked deletions
-- shallow Git hydration for OpenClaw changed-test detection
+- shallow Git hydration for configured base-ref detection
 - SSH execution on port `2222`
 
 Not yet done:
@@ -130,10 +133,10 @@ Onboard a repo for Crabbox:
 bin/crabbox init
 ```
 
-Warm a reusable OpenClaw testbox:
+Warm a reusable testbox:
 
 ```sh
-bin/crabbox warmup --profile openclaw-check --class beast --idle-timeout 90m
+bin/crabbox warmup --profile project-check --class beast --idle-timeout 90m
 ```
 
 Use AWS EC2 Spot through the broker:
@@ -277,7 +280,7 @@ Environment variables remain supported for automation and direct-provider debug:
 ```text
 HCLOUD_TOKEN or HETZNER_TOKEN     Hetzner Cloud API token
 AWS_PROFILE/AWS_*                AWS SDK credentials for direct --provider aws fallback
-CRABBOX_PROFILE                  default openclaw-check
+CRABBOX_PROFILE                  default default
 CRABBOX_PROVIDER                 default hetzner
 CRABBOX_CONFIG                   optional config file override
 CRABBOX_COORDINATOR              optional broker URL override
@@ -297,11 +300,16 @@ CRABBOX_SSH_KEY                  default ~/.ssh/id_ed25519
 CRABBOX_SSH_USER                 default crabbox
 CRABBOX_SSH_PORT                 default 2222
 CRABBOX_WORK_ROOT                default /work/crabbox
+CRABBOX_SYNC_CHECKSUM            opt into checksum rsync
+CRABBOX_SYNC_DELETE              opt into/out of rsync --delete
+CRABBOX_SYNC_GIT_SEED            opt into/out of remote Git seeding
+CRABBOX_SYNC_FINGERPRINT         opt into/out of no-op sync skipping
+CRABBOX_SYNC_BASE_REF            default base ref to hydrate
+CRABBOX_ENV_ALLOW                comma-separated env allowlist
 ```
 
-Forwarded environment is intentionally narrow:
+Forwarded environment is intentionally narrow and project-configured:
 
-- `OPENCLAW_*`
 - `NODE_OPTIONS`
 - `CI`
 

@@ -36,7 +36,7 @@ export function leaseConfig(input: LeaseRequest): LeaseConfig {
   }
   return {
     provider,
-    profile: input.profile ?? "openclaw-check",
+    profile: input.profile ?? "default",
     class: machineClass,
     serverType,
     location: input.location ?? "fsn1",

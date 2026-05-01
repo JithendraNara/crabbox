@@ -3,6 +3,7 @@ import { leaseConfig } from "./config";
 import { HetznerClient } from "./hetzner";
 import { errorMessage, json, pathParts, readJson, requestOwner } from "./http";
 import type { Env, LeaseRecord, LeaseRequest, Provider, ProviderMachine } from "./types";
+import { costLimits, enforceCostLimits, leaseCost, requestOrg, usageSummary } from "./usage";
 
 const fleetID = "default";
 
@@ -21,6 +22,9 @@ export class FleetDurableObject implements DurableObject {
       }
       if (method === "GET" && parts.join("/") === "v1/pool") {
         return await this.pool(request);
+      }
+      if (method === "GET" && parts.join("/") === "v1/usage") {
+        return await this.usage(request);
       }
       if (method === "GET" && parts.join("/") === "v1/leases") {
         return await this.listLeases();
@@ -44,34 +48,61 @@ export class FleetDurableObject implements DurableObject {
 
   private async createLease(request: Request): Promise<Response> {
     const owner = requestOwner(request);
+    const org = requestOrg(request, this.env);
     const input = await readJson<LeaseRequest>(request);
     const config = leaseConfig(input);
     const leaseID = validLeaseID(input.leaseID) ? input.leaseID : newLeaseID();
-    const provider = this.provider(config.provider, config.awsRegion);
-    const { server, serverType } = await provider.createServerWithFallback(config, leaseID, owner);
+    const cost = leaseCost(this.env, config.provider, config.serverType, config.ttlSeconds);
     const now = new Date();
     const record: LeaseRecord = {
       id: leaseID,
       provider: config.provider,
-      cloudID: server.cloudID,
+      cloudID: "",
       owner,
+      org,
       profile: config.profile,
       class: config.class,
-      serverType,
-      serverID: server.id,
-      serverName: server.name,
+      serverType: config.serverType,
+      serverID: 0,
+      serverName: "",
       providerKey: config.providerKey,
-      host: server.host,
+      host: "",
       sshUser: config.sshUser,
       sshPort: config.sshPort,
       workRoot: config.workRoot,
       keep: config.keep,
       ttlSeconds: config.ttlSeconds,
+      estimatedHourlyUSD: cost.hourlyUSD,
+      maxEstimatedUSD: cost.maxUSD,
       state: "active",
       createdAt: now.toISOString(),
       updatedAt: now.toISOString(),
       expiresAt: new Date(now.getTime() + config.ttlSeconds * 1000).toISOString(),
     };
+    const leases = await this.leaseRecords();
+    const limitError = enforceCostLimits(leases, record, costLimits(this.env), now);
+    if (limitError) {
+      return json({ error: "cost_limit_exceeded", message: limitError }, { status: 429 });
+    }
+    const provider = this.provider(config.provider, config.awsRegion);
+    const { server, serverType } = await provider.createServerWithFallback(config, leaseID, owner);
+    record.cloudID = server.cloudID;
+    record.serverType = serverType;
+    record.serverID = server.id;
+    record.serverName = server.name;
+    record.host = server.host;
+    record.estimatedHourlyUSD = leaseCost(
+      this.env,
+      config.provider,
+      serverType,
+      config.ttlSeconds,
+    ).hourlyUSD;
+    record.maxEstimatedUSD = leaseCost(
+      this.env,
+      config.provider,
+      serverType,
+      config.ttlSeconds,
+    ).maxUSD;
     if (config.provider === "aws") {
       record.region = config.awsRegion;
     }
@@ -108,8 +139,11 @@ export class FleetDurableObject implements DurableObject {
     if (shouldDelete && lease.state === "active") {
       await this.deleteLeaseServer(lease);
     }
+    const now = new Date().toISOString();
     lease.state = "released";
-    lease.updatedAt = new Date().toISOString();
+    lease.updatedAt = now;
+    lease.releasedAt = now;
+    lease.endedAt = now;
     await this.putLease(lease);
     return json({ lease });
   }
@@ -132,8 +166,21 @@ export class FleetDurableObject implements DurableObject {
   }
 
   private async listLeases(): Promise<Response> {
-    const leases = await this.state.storage.list<LeaseRecord>({ prefix: "lease:" });
-    return json({ leases: [...leases.values()] });
+    return json({ leases: await this.leaseRecords() });
+  }
+
+  private async usage(request: Request): Promise<Response> {
+    const url = new URL(request.url);
+    const requestedScope = url.searchParams.get("scope") ?? "user";
+    const scope =
+      requestedScope === "org" || requestedScope === "all" || requestedScope === "user"
+        ? requestedScope
+        : "user";
+    const month = url.searchParams.get("month") ?? new Date().toISOString().slice(0, 7);
+    const owner = url.searchParams.get("owner") ?? requestOwner(request);
+    const org = url.searchParams.get("org") ?? requestOrg(request, this.env);
+    const usage = usageSummary(await this.leaseRecords(), { scope, owner, org, month }, new Date());
+    return json({ usage, limits: costLimits(this.env) });
   }
 
   private async expireLeases(): Promise<void> {
@@ -147,8 +194,10 @@ export class FleetDurableObject implements DurableObject {
         if (!lease.keep) {
           await this.deleteLeaseServer(lease).catch(() => undefined);
         }
+        const nowISO = new Date().toISOString();
         lease.state = "expired";
-        lease.updatedAt = new Date().toISOString();
+        lease.updatedAt = nowISO;
+        lease.endedAt = nowISO;
         await this.putLease(lease);
       }),
     );
@@ -169,6 +218,11 @@ export class FleetDurableObject implements DurableObject {
 
   private async getLease(leaseID: string): Promise<LeaseRecord | undefined> {
     return this.state.storage.get<LeaseRecord>(leaseKey(leaseID));
+  }
+
+  private async leaseRecords(): Promise<LeaseRecord[]> {
+    const leases = await this.state.storage.list<LeaseRecord>({ prefix: "lease:" });
+    return [...leases.values()];
   }
 
   private async requireLease(leaseID: string): Promise<LeaseRecord> {

@@ -11,6 +11,7 @@ The orchestrator owns:
 - server creation and deletion;
 - idle expiry and heartbeat renewal;
 - pool listing;
+- cost controls and usage estimates;
 - status lookup.
 
 The CLI owns:
@@ -54,6 +55,38 @@ Direct cleanup only deletes machines that are clearly safe:
 - active states are skipped;
 - expired inactive machines can be deleted;
 - stale active states older than expiry plus 12 hours can be deleted.
+
+## Cost Control
+
+The orchestrator estimates cost before creating a machine. It uses a provider/server-type hourly rate, multiplies it by lease TTL, and reserves that worst-case amount for the current month. This is a guardrail, not a billing export.
+
+Rate defaults are built in for the common Hetzner and AWS classes. Override them with:
+
+```text
+CRABBOX_COST_RATES_JSON='{"aws:c7a.48xlarge":9,"hetzner:ccx63":1.08}'
+```
+
+Supported limits:
+
+```text
+CRABBOX_MAX_ACTIVE_LEASES
+CRABBOX_MAX_ACTIVE_LEASES_PER_OWNER
+CRABBOX_MAX_ACTIVE_LEASES_PER_ORG
+CRABBOX_MAX_MONTHLY_USD
+CRABBOX_MAX_MONTHLY_USD_PER_OWNER
+CRABBOX_MAX_MONTHLY_USD_PER_ORG
+CRABBOX_DEFAULT_ORG
+```
+
+The CLI sends `X-Crabbox-Owner` from `CRABBOX_OWNER`, Git author/committer email env, or local `git config user.email`. It sends `X-Crabbox-Org` from `CRABBOX_ORG` when set. Cloudflare Access email still wins when present.
+
+If a new lease would exceed a configured active-lease or monthly reserved-cost limit, the coordinator returns `cost_limit_exceeded` and does not provision the machine.
+
+## Usage Statistics
+
+The coordinator exposes `GET /v1/usage`. `crabbox usage` can show a single user, an org, or the whole fleet for a month.
+
+Usage reports include lease count, active lease count, elapsed runtime, estimated elapsed cost, reserved worst-case cost, and breakdowns by owner, org, provider, and server type.
 
 ## Blacksmith Parity Boundary
 

@@ -43,7 +43,7 @@ describe("lease config", () => {
   it("uses strict defaults and clamps ttl", () => {
     const config = leaseConfig({ sshPublicKey: "ssh-ed25519 test", ttlSeconds: 999_999 });
     expect(config.provider).toBe("hetzner");
-    expect(config.profile).toBe("openclaw-check");
+    expect(config.profile).toBe("default");
     expect(config.sshPort).toBe("2222");
     expect(config.ttlSeconds).toBe(86_400);
   });

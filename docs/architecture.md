@@ -39,8 +39,8 @@ leased machine
 5. Durable Object chooses a provider from config and creates a Hetzner server or AWS EC2 Spot instance.
 6. Coordinator returns lease ID, machine address, SSH user, workdir, and expiry.
 7. CLI waits for `crabbox-ready`.
-8. CLI syncs files with `rsync --delete --checksum`.
-9. CLI runs sync sanity and shallow Git hydration.
+8. CLI seeds remote Git when possible, compares sync fingerprints, and syncs changed files with `rsync --delete`.
+9. CLI runs sync sanity and configured base-ref hydration.
 10. CLI runs the command over SSH and streams stdout/stderr.
 11. CLI heartbeats while the command runs.
 12. CLI releases the lease when done.
@@ -58,6 +58,7 @@ GET  /v1/leases
 GET  /v1/leases/{id}
 POST /v1/leases/{id}/heartbeat
 POST /v1/leases/{id}/release
+GET  /v1/usage
 ```
 
 Admin endpoints can be gated by GitHub team or explicit allowlist once GitHub IdP is active.
@@ -70,7 +71,7 @@ Core tables:
 
 ```sql
 machines(id, provider, provider_id, profile, class, state, address, ssh_user, labels_json, lease_id, created_at, updated_at, last_seen_at)
-leases(id, owner, profile, machine_id, state, command, repo, ttl_seconds, expires_at, created_at, updated_at, released_at)
+leases(id, owner, org, profile, machine_id, state, command, repo, ttl_seconds, estimated_hourly_usd, max_estimated_usd, expires_at, created_at, updated_at, released_at)
 events(id, lease_id, machine_id, type, actor, message, payload_json, created_at)
 ```
 
@@ -136,6 +137,7 @@ User config is JSON and can define:
 - sync excludes.
 - env allowlists.
 - trusted projects.
+- sync behavior such as checksum mode, Git seeding, and fingerprint skipping.
 
 It must not store:
 

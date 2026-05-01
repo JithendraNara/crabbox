@@ -8,6 +8,8 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"os"
+	"os/exec"
 	"strings"
 	"time"
 )
@@ -45,6 +47,45 @@ type CoordinatorMachine struct {
 	ServerType string            `json:"serverType"`
 	Host       string            `json:"host"`
 	Labels     map[string]string `json:"labels"`
+}
+
+type CoordinatorUsageResponse struct {
+	Usage  CoordinatorUsageSummary `json:"usage"`
+	Limits CoordinatorCostLimits   `json:"limits"`
+}
+
+type CoordinatorUsageSummary struct {
+	Month          string                  `json:"month"`
+	Scope          string                  `json:"scope"`
+	Owner          string                  `json:"owner,omitempty"`
+	Org            string                  `json:"org,omitempty"`
+	Leases         int                     `json:"leases"`
+	ActiveLeases   int                     `json:"activeLeases"`
+	RuntimeSeconds int64                   `json:"runtimeSeconds"`
+	EstimatedUSD   float64                 `json:"estimatedUSD"`
+	ReservedUSD    float64                 `json:"reservedUSD"`
+	ByOwner        []CoordinatorUsageGroup `json:"byOwner"`
+	ByOrg          []CoordinatorUsageGroup `json:"byOrg"`
+	ByProvider     []CoordinatorUsageGroup `json:"byProvider"`
+	ByServerType   []CoordinatorUsageGroup `json:"byServerType"`
+}
+
+type CoordinatorUsageGroup struct {
+	Key            string  `json:"key"`
+	Leases         int     `json:"leases"`
+	ActiveLeases   int     `json:"activeLeases"`
+	RuntimeSeconds int64   `json:"runtimeSeconds"`
+	EstimatedUSD   float64 `json:"estimatedUSD"`
+	ReservedUSD    float64 `json:"reservedUSD"`
+}
+
+type CoordinatorCostLimits struct {
+	MaxActiveLeases         int     `json:"maxActiveLeases"`
+	MaxActiveLeasesPerOwner int     `json:"maxActiveLeasesPerOwner"`
+	MaxActiveLeasesPerOrg   int     `json:"maxActiveLeasesPerOrg"`
+	MaxMonthlyUSD           float64 `json:"maxMonthlyUSD"`
+	MaxMonthlyUSDPerOwner   float64 `json:"maxMonthlyUSDPerOwner"`
+	MaxMonthlyUSDPerOrg     float64 `json:"maxMonthlyUSDPerOrg"`
 }
 
 type CoordinatorID string
@@ -147,6 +188,29 @@ func (c *CoordinatorClient) Pool(ctx context.Context, cfg Config) ([]Coordinator
 	return res.Machines, err
 }
 
+func (c *CoordinatorClient) Usage(ctx context.Context, scope, owner, org, month string) (CoordinatorUsageResponse, error) {
+	var res CoordinatorUsageResponse
+	values := url.Values{}
+	if scope != "" {
+		values.Set("scope", scope)
+	}
+	if owner != "" {
+		values.Set("owner", owner)
+	}
+	if org != "" {
+		values.Set("org", org)
+	}
+	if month != "" {
+		values.Set("month", month)
+	}
+	path := "/v1/usage"
+	if encoded := values.Encode(); encoded != "" {
+		path += "?" + encoded
+	}
+	err := c.do(ctx, http.MethodGet, path, nil, &res)
+	return res, err
+}
+
 func (c *CoordinatorClient) Health(ctx context.Context) error {
 	var res map[string]any
 	return c.do(ctx, http.MethodGet, "/v1/health", nil, &res)
@@ -173,6 +237,12 @@ func (c *CoordinatorClient) do(ctx context.Context, method, path string, body an
 	if c.Token != "" {
 		req.Header.Set("Authorization", "Bearer "+c.Token)
 	}
+	if owner := localCoordinatorOwner(); owner != "" {
+		req.Header.Set("X-Crabbox-Owner", owner)
+	}
+	if org := os.Getenv("CRABBOX_ORG"); org != "" {
+		req.Header.Set("X-Crabbox-Org", org)
+	}
 	resp, err := c.Client.Do(req)
 	if err != nil {
 		return err
@@ -192,6 +262,19 @@ func (c *CoordinatorClient) do(ctx context.Context, method, path string, body an
 		}
 	}
 	return nil
+}
+
+func localCoordinatorOwner() string {
+	for _, key := range []string{"CRABBOX_OWNER", "GIT_AUTHOR_EMAIL", "GIT_COMMITTER_EMAIL"} {
+		if value := strings.TrimSpace(os.Getenv(key)); value != "" {
+			return value
+		}
+	}
+	out, err := exec.Command("git", "config", "--get", "user.email").Output()
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(out))
 }
 
 func leaseToServerTarget(lease CoordinatorLease, cfg Config) (Server, SSHTarget, string) {

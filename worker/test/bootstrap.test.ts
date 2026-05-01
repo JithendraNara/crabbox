@@ -5,7 +5,7 @@ import type { LeaseConfig } from "../src/config";
 
 const config: LeaseConfig = {
   provider: "aws",
-  profile: "openclaw-check",
+  profile: "project-check",
   class: "standard",
   serverType: "c7a.8xlarge",
   location: "fsn1",

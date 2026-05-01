@@ -49,18 +49,20 @@ Rules:
 
 - Secrets stay local.
 - CLI forwards env only by allowlist.
-- Users can opt in additional env names with `--env`.
+- Users can opt in additional env names with repo-local `env.allow` config.
 - Never accept secret values as command-line flag values.
 - Never log env values.
 - Redact known secret-looking strings in diagnostics.
 - `CRABBOX_SHARED_TOKEN` is stored as a Worker secret; local clients use `CRABBOX_COORDINATOR_TOKEN`.
 
-Profile allowlist example:
+Project allowlist example:
 
-```yaml
-envAllowlist:
-  - OPENCLAW_*
-  - NODE_OPTIONS
+```json
+{
+  "env": {
+    "allow": ["CI", "NODE_OPTIONS", "PROJECT_*"]
+  }
+}
 ```
 
 ## SSH

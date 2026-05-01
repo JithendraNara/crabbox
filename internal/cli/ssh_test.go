@@ -32,6 +32,40 @@ func TestRemoteCommandQuotesWorkdirEnvAndArgs(t *testing.T) {
 	}
 }
 
+func TestRemoteShellCommandRunsScript(t *testing.T) {
+	got := remoteShellCommand("/work/crabbox/cbx_1/repo", map[string]string{"CI": "1"}, "pnpm install && pnpm test")
+	for _, want := range []string{
+		"cd '/work/crabbox/cbx_1/repo'",
+		"CI='1'",
+		"bash -lc 'pnpm install && pnpm test'",
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("remoteShellCommand() missing %q in %q", want, got)
+		}
+	}
+}
+
+func TestShouldUseShellForControlOperators(t *testing.T) {
+	if !shouldUseShell([]string{"pnpm", "install", "&&", "pnpm", "test"}) {
+		t.Fatal("expected shell mode for && token")
+	}
+	if !shouldUseShell([]string{"pnpm install && pnpm test"}) {
+		t.Fatal("expected shell mode for single shell string")
+	}
+	if shouldUseShell([]string{"pnpm", "test"}) {
+		t.Fatal("plain argv command should not use shell")
+	}
+}
+
+func TestEnvAllowlist(t *testing.T) {
+	if !envAllowed("CUSTOM_TOKEN", []string{"CI", "CUSTOM_*"}) {
+		t.Fatal("wildcard env allow failed")
+	}
+	if envAllowed("PROJECT_TOKEN", []string{"CI", "NODE_OPTIONS"}) {
+		t.Fatal("unexpected env forwarding without config")
+	}
+}
+
 func TestSSHArgsIncludeReliabilityOptions(t *testing.T) {
 	t.Setenv("HOME", "/tmp/crabbox-home")
 	got := strings.Join(sshArgs(SSHTarget{

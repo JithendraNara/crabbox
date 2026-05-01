@@ -28,6 +28,15 @@ func TestLoadConfigFromUserFile(t *testing.T) {
     "region": "eu-west-1",
     "rootGB": 800
   },
+  "sync": {
+    "checksum": true,
+    "gitSeed": false,
+    "baseRef": "trunk",
+    "exclude": [".artifacts", "tmp"]
+  },
+  "env": {
+    "allow": ["CI", "NODE_OPTIONS", "CUSTOM_*"]
+  },
   "ssh": {
     "key": "~/.ssh/crabbox"
   }
@@ -53,6 +62,15 @@ func TestLoadConfigFromUserFile(t *testing.T) {
 	}
 	if cfg.SSHKey != filepath.Join(home, ".ssh", "crabbox") {
 		t.Fatalf("SSHKey=%q", cfg.SSHKey)
+	}
+	if !cfg.Sync.Checksum || cfg.Sync.GitSeed || cfg.Sync.BaseRef != "trunk" {
+		t.Fatalf("sync config not loaded: %#v", cfg.Sync)
+	}
+	if len(cfg.Sync.Excludes) != 2 || cfg.Sync.Excludes[0] != ".artifacts" || cfg.Sync.Excludes[1] != "tmp" {
+		t.Fatalf("sync excludes not loaded: %#v", cfg.Sync.Excludes)
+	}
+	if len(cfg.EnvAllow) != 3 || cfg.EnvAllow[2] != "CUSTOM_*" {
+		t.Fatalf("env allow not loaded: %#v", cfg.EnvAllow)
 	}
 }
 

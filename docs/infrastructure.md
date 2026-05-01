@@ -233,23 +233,22 @@ It should not contain secrets or live lease data.
 
 Example:
 
-```yaml
-version: 1
-fleet:
-  name: openclaw
-  coordinator: https://crabbox.openclaw.ai
-
-profiles:
-  openclaw-check:
-    labels: [linux, x64, docker, node24]
-    defaultClass: fast
-    ttl: 90m
-    maxTTL: 24h
-    sync:
-      exclude: [node_modules, .turbo, .git/lfs]
-    envAllowlist:
-      - OPENCLAW_*
-      - NODE_OPTIONS
+```json
+{
+  "profile": "project-check",
+  "class": "fast",
+  "sync": {
+    "delete": true,
+    "checksum": false,
+    "gitSeed": true,
+    "fingerprint": true,
+    "baseRef": "main",
+    "exclude": ["node_modules", ".turbo", "dist"]
+  },
+  "env": {
+    "allow": ["CI", "NODE_OPTIONS", "PROJECT_*"]
+  }
+}
 ```
 
 ## Deployment
