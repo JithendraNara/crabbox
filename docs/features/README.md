@@ -12,7 +12,8 @@ Core features:
 
 - [Coordinator](coordinator.md): brokered leases through Cloudflare Workers and Durable Objects.
 - [Broker auth and routing](broker-auth-routing.md): bearer tokens, Cloudflare Access identity, and Worker routes.
-- [Providers](providers.md): Hetzner and AWS EC2 Spot provisioning, classes, and fallback.
+- [Providers](providers.md): Hetzner, AWS EC2 Spot, Blacksmith Testbox selection, classes, and fallback.
+- [Blacksmith Testbox](blacksmith-testbox.md): wrapper mode that delegates machines and sync to the Blacksmith CLI.
 - [Runner bootstrap](runner-bootstrap.md): cloud-init, installed tools, SSH port, and readiness.
 - [Sync](sync.md): Git file-list manifests, rsync, fingerprints, excludes, guardrails, and sanity checks.
 - [Actions hydration](actions-hydration.md): let GitHub Actions prepare a runner, then sync local work into that workspace.

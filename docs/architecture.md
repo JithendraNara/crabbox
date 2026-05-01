@@ -70,7 +70,7 @@ POST /v1/admin/leases/{id-or-slug}/release
 POST /v1/admin/leases/{id-or-slug}/delete
 ```
 
-Admin endpoints require the shared operator token. GitHub browser-login tokens are user tokens for normal lease operations; GitHub org/team gating is future hardening.
+Admin endpoints and `GET /v1/pool` require the shared operator token. GitHub browser-login tokens are user tokens for normal lease operations and are minted only after allowed GitHub org membership is verified. User-token list, exact-ID lookup, slug lookup, heartbeat, release, run history, logs, and usage are scoped to the token owner/org.
 
 ## Durable Object State
 

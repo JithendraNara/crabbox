@@ -41,6 +41,8 @@ POST /v1/admin/leases/{id-or-slug}/release
 POST /v1/admin/leases/{id-or-slug}/delete
 ```
 
+GitHub browser-login tokens are owner/org scoped for lease, run, log, and usage routes. Shared-token admin auth is required for `GET /v1/pool`, admin lease routes, and fleet-wide usage/listing.
+
 Lease responses include the canonical `cbx_...` ID, friendly slug when present, provider metadata, owner/org, `createdAt`, `lastTouchedAt`, `idleTimeoutSeconds`, `ttlSeconds`, and computed `expiresAt`. Heartbeat is a touch and can update idle timeout only when the request explicitly sends `idleTimeoutSeconds`.
 
 The CLI owns local config, per-lease SSH keys, SSH readiness, sync, command execution, output streaming, and local fallback handling.

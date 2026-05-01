@@ -10,10 +10,13 @@ export interface Env {
   CRABBOX_AWS_SUBNET_ID?: string;
   CRABBOX_AWS_INSTANCE_PROFILE?: string;
   CRABBOX_AWS_ROOT_GB?: string;
+  CRABBOX_AWS_SSH_CIDRS?: string;
   CRABBOX_SHARED_TOKEN?: string;
   CRABBOX_SESSION_SECRET?: string;
   CRABBOX_GITHUB_CLIENT_ID?: string;
   CRABBOX_GITHUB_CLIENT_SECRET?: string;
+  CRABBOX_GITHUB_ALLOWED_ORG?: string;
+  CRABBOX_GITHUB_ALLOWED_ORGS?: string;
   CRABBOX_PUBLIC_URL?: string;
   CRABBOX_DEFAULT_ORG?: string;
   CRABBOX_COST_RATES_JSON?: string;
@@ -42,6 +45,7 @@ export interface LeaseRequest {
   awsSubnetID?: string;
   awsProfile?: string;
   awsRootGB?: number;
+  awsSSHCIDRs?: string[];
   capacity?: {
     market?: "spot" | "on-demand";
     strategy?: "most-available" | "price-capacity-optimized" | "capacity-optimized" | "sequential";

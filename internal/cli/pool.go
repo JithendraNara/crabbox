@@ -17,7 +17,7 @@ func (a App) pool(ctx context.Context, args []string) error {
 
 func (a App) list(ctx context.Context, args []string) error {
 	fs := newFlagSet("list", a.Stderr)
-	provider := fs.String("provider", defaultConfig().Provider, "provider: hetzner or aws")
+	provider := fs.String("provider", defaultConfig().Provider, "provider: hetzner, aws, or blacksmith-testbox")
 	jsonOut := fs.Bool("json", false, "print JSON")
 	if err := parseFlags(fs, args); err != nil {
 		return err
@@ -27,6 +27,9 @@ func (a App) list(ctx context.Context, args []string) error {
 		return err
 	}
 	cfg.Provider = *provider
+	if isBlacksmithProvider(cfg.Provider) {
+		return a.blacksmithList(ctx, cfg, *jsonOut)
+	}
 	if coord, ok, err := newCoordinatorClient(cfg); err != nil {
 		return err
 	} else if ok {

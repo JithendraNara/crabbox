@@ -33,7 +33,7 @@ crabbox init [--force]
 crabbox config show [--json]
 crabbox config path
 crabbox config set-broker --url <url> --token-stdin [--provider hetzner|aws]
-crabbox warmup [--provider hetzner|aws] [--profile <name>] [--idle-timeout <duration>]
+crabbox warmup [--provider hetzner|aws|blacksmith-testbox] [--profile <name>] [--idle-timeout <duration>]
 crabbox run [--id <lease-id-or-slug>] [--shell] [--checksum] [--debug] [--force-sync-large] -- <command...>
 crabbox sync-plan [--limit <n>]
 crabbox history [--lease <lease-id>] [--owner <email>] [--org <name>] [--limit <n>] [--json]
@@ -87,6 +87,15 @@ crabbox warmup
 crabbox actions hydrate --id blue-lobster
 crabbox run --id blue-lobster -- pnpm test:changed
 crabbox stop blue-lobster
+```
+
+Use Blacksmith Testboxes through the same Crabbox surface:
+
+```sh
+blacksmith auth login
+crabbox warmup --provider blacksmith-testbox
+crabbox run --provider blacksmith-testbox --id blue-lobster -- pnpm test:changed
+crabbox stop --provider blacksmith-testbox blue-lobster
 ```
 
 Inspect pool:
@@ -178,7 +187,7 @@ Flags:
 
 ```text
 --id <lease-id-or-slug>  reuse an existing lease
---provider <name>        hetzner or aws
+--provider <name>        hetzner, aws, or blacksmith-testbox
 --profile <name>        profile to run on
 --class <name>          machine class override
 --type <name>           provider server or instance type override
@@ -198,6 +207,8 @@ Flags:
 Secrets must not be accepted as flag values. Env forwarding is name-based only.
 
 Crabbox stores local lease claims under its state directory. `warmup` and first reuse claim the lease for the current repo; later `run`, `ssh`, `cache`, and `actions hydrate/register` refuse a conflicting repo claim unless `--reclaim` is set.
+
+With `provider: blacksmith-testbox`, Crabbox delegates machine setup, sync, and command transport to the Blacksmith CLI. `--sync-only` is unsupported, sync timing is reported as `sync=delegated`, and Blacksmith auth is handled by `blacksmith auth login`, not `crabbox login`.
 
 ## Exit Codes
 
@@ -311,6 +322,19 @@ cache:
   purgeOnRelease: false
 ```
 
+Blacksmith Testbox config:
+
+```yaml
+provider: blacksmith-testbox
+blacksmith:
+  org: openclaw
+  workflow: .github/workflows/ci-check-testbox.yml
+  job: test
+  ref: main
+  idleTimeout: 90m
+  debug: false
+```
+
 ## Environment Variables
 
 ```text
@@ -334,6 +358,12 @@ CRABBOX_ACTIONS_REPO
 CRABBOX_ACTIONS_RUNNER_VERSION
 CRABBOX_ACTIONS_RUNNER_LABELS
 CRABBOX_ACTIONS_EPHEMERAL
+CRABBOX_BLACKSMITH_ORG
+CRABBOX_BLACKSMITH_WORKFLOW
+CRABBOX_BLACKSMITH_JOB
+CRABBOX_BLACKSMITH_REF
+CRABBOX_BLACKSMITH_IDLE_TIMEOUT
+CRABBOX_BLACKSMITH_DEBUG
 CRABBOX_RESULTS_JUNIT
 CRABBOX_SYNC_CHECKSUM
 CRABBOX_SYNC_DELETE

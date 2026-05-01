@@ -6,6 +6,7 @@ import { requestOrg } from "./usage";
 const githubAuthorizeURL = "https://github.com/login/oauth/authorize";
 const githubTokenURL = "https://github.com/login/oauth/access_token";
 const githubAPIURL = "https://api.github.com";
+const maxPendingOAuthLogins = 100;
 
 interface OAuthPending {
   id: string;
@@ -71,6 +72,16 @@ async function githubAuthStart(
   if (!input.pollSecretHash || !/^[a-f0-9]{64}$/.test(input.pollSecretHash)) {
     return json({ error: "invalid_poll_secret_hash" }, { status: 400 });
   }
+  const pendingCount = await cleanupExpiredPendingOAuth(storage);
+  if (pendingCount >= maxPendingOAuthLogins) {
+    return json(
+      {
+        error: "login_rate_limited",
+        message: "Too many pending GitHub logins. Try again shortly.",
+      },
+      { status: 429 },
+    );
+  }
   const id = randomID("login");
   const state = randomID("state");
   const now = new Date();
@@ -91,7 +102,7 @@ async function githubAuthStart(
   const authorize = new URL(githubAuthorizeURL);
   authorize.searchParams.set("client_id", clientID);
   authorize.searchParams.set("redirect_uri", githubRedirectURI(request, env));
-  authorize.searchParams.set("scope", "read:user user:email");
+  authorize.searchParams.set("scope", "read:user user:email read:org");
   authorize.searchParams.set("state", state);
   return json({
     loginID: id,
@@ -126,12 +137,13 @@ async function githubAuthCallback(
   try {
     const accessToken = await exchangeGitHubCode(code, githubRedirectURI(request, env), env);
     const identity = await githubIdentity(accessToken);
-    const org = requestOrg(
+    const requestedOrg = requestOrg(
       new Request(request.url, {
         headers: { "x-crabbox-org": env.CRABBOX_DEFAULT_ORG ?? "openclaw" },
       }),
       env,
     );
+    const org = await requireAllowedOrgMembership(accessToken, identity.login, requestedOrg, env);
     const tokenInput = {
       owner: identity.owner,
       org,
@@ -152,6 +164,9 @@ async function githubAuthCallback(
   } catch (err) {
     pending.error = errorMessage(err);
     await storage.put(oauthKey(pending.id), pending);
+    if (err instanceof GitHubAuthorizationError) {
+      return html("Crabbox login denied", err.message, 403);
+    }
     return html("Crabbox login failed", "The coordinator could not finish GitHub login.", 500);
   }
 }
@@ -254,12 +269,76 @@ async function githubIdentity(accessToken: string): Promise<{
   return identity;
 }
 
+async function requireAllowedOrgMembership(
+  accessToken: string,
+  login: string,
+  requestedOrg: string,
+  env: Env,
+): Promise<string> {
+  const allowed = allowedGitHubOrgs(env);
+  const requested = requestedOrg.toLowerCase();
+  const org = allowed.includes(requested) ? requested : allowed[0];
+  if (!org) {
+    throw new GitHubAuthorizationError("GitHub login is not configured with an allowed org.");
+  }
+  const response = await fetch(`${githubAPIURL}/user/memberships/orgs/${encodeURIComponent(org)}`, {
+    headers: githubHeaders(accessToken),
+  });
+  if (!response.ok) {
+    throw new GitHubAuthorizationError(`GitHub user ${login} is not an active member of ${org}.`);
+  }
+  const membership = (await response.json()) as {
+    state?: string;
+    organization?: { login?: string };
+  };
+  if (
+    membership.state !== "active" ||
+    membership.organization?.login?.toLowerCase() !== org.toLowerCase()
+  ) {
+    throw new GitHubAuthorizationError(`GitHub user ${login} is not an active member of ${org}.`);
+  }
+  return membership.organization.login || org;
+}
+
+function allowedGitHubOrgs(env: Env): string[] {
+  const raw = env.CRABBOX_GITHUB_ALLOWED_ORGS || env.CRABBOX_GITHUB_ALLOWED_ORG;
+  const values = raw ? raw.split(",") : [env.CRABBOX_DEFAULT_ORG || "openclaw"];
+  return values.map((value) => value.trim().toLowerCase()).filter(Boolean);
+}
+
+function githubHeaders(accessToken: string): Record<string, string> {
+  return {
+    accept: "application/vnd.github+json",
+    authorization: `Bearer ${accessToken}`,
+    "user-agent": "crabbox-coordinator",
+    "x-github-api-version": "2022-11-28",
+  };
+}
+
+class GitHubAuthorizationError extends Error {}
+
 async function deletePendingOAuth(
   storage: DurableObjectStorage,
   pending: OAuthPending,
 ): Promise<void> {
   await storage.delete(oauthKey(pending.id));
   await storage.delete(oauthStateKey(pending.state));
+}
+
+async function cleanupExpiredPendingOAuth(storage: DurableObjectStorage): Promise<number> {
+  const entries = await storage.list<OAuthPending>({ prefix: "oauth:" });
+  let active = 0;
+  const now = Date.now();
+  await Promise.all(
+    [...entries.values()].map(async (pending) => {
+      if (Date.parse(pending.expiresAt) <= now) {
+        await deletePendingOAuth(storage, pending);
+        return;
+      }
+      active += 1;
+    }),
+  );
+  return active;
 }
 
 function oauthKey(id: string): string {

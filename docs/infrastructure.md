@@ -52,6 +52,7 @@ CRABBOX_CLOUDFLARE_ZONE_NAME
 CRABBOX_DOMAIN
 CRABBOX_FALLBACK_DOMAIN
 CRABBOX_GITHUB_ALLOWED_ORG
+CRABBOX_GITHUB_ALLOWED_ORGS
 ```
 
 GitHub IdP needs a GitHub OAuth app:
@@ -77,6 +78,7 @@ CRABBOX_GITHUB_OAUTH_CLIENT_ID
 CRABBOX_GITHUB_OAUTH_CLIENT_SECRET
 CRABBOX_GITHUB_CLIENT_ID
 CRABBOX_GITHUB_CLIENT_SECRET
+CRABBOX_GITHUB_ALLOWED_ORG
 CRABBOX_SESSION_SECRET
 ```
 
@@ -187,9 +189,12 @@ CRABBOX_AWS_SECURITY_GROUP_ID    optional security group override
 CRABBOX_AWS_SUBNET_ID            optional subnet override
 CRABBOX_AWS_INSTANCE_PROFILE     optional IAM instance profile name
 CRABBOX_AWS_ROOT_GB              default 400
+CRABBOX_AWS_SSH_CIDRS            optional comma-separated SSH source CIDRs
 ```
 
 The AWS provider imports the local SSH public key as an EC2 key pair when needed, creates or reuses a `crabbox-runners` security group when no security group is supplied, launches one-time Spot instances, tags instances and volumes with Crabbox lease metadata, and terminates non-kept instances after the command.
+
+SSH ingress for broker-created AWS security groups is source-scoped. If `CRABBOX_AWS_SSH_CIDRS` is set, Crabbox adds those CIDRs. Otherwise, when Cloudflare provides `CF-Connecting-IP`, the Worker adds that request source as `/32` or `/128`. Crabbox also revokes the old managed `0.0.0.0/0` SSH ingress rule when it touches the managed security group. Supplying `CRABBOX_AWS_SECURITY_GROUP_ID` makes network policy your responsibility.
 
 ## Machine Classes
 

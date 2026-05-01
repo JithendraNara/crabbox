@@ -14,7 +14,7 @@ func (a App) warmup(ctx context.Context, args []string) error {
 	started := time.Now()
 	defaults := defaultConfig()
 	fs := newFlagSet("warmup", a.Stderr)
-	provider := fs.String("provider", defaults.Provider, "provider: hetzner or aws")
+	provider := fs.String("provider", defaults.Provider, "provider: hetzner, aws, or blacksmith-testbox")
 	profile := fs.String("profile", defaults.Profile, "profile")
 	class := fs.String("class", defaults.Class, "machine class")
 	serverType := fs.String("type", getenv("CRABBOX_SERVER_TYPE", ""), "provider server/instance type")
@@ -55,6 +55,12 @@ func (a App) warmup(ctx context.Context, args []string) error {
 	if err != nil {
 		return err
 	}
+	if isBlacksmithProvider(cfg.Provider) {
+		if *actionsRunner {
+			return exit(2, "--actions-runner is not supported for provider=%s; Blacksmith owns runner hydration", cfg.Provider)
+		}
+		return a.blacksmithWarmup(ctx, cfg, repo, *keep, *reclaim)
+	}
 
 	coord, useCoordinator, err := newCoordinatorClient(cfg)
 	if err != nil {
@@ -93,7 +99,7 @@ func (a App) warmup(ctx context.Context, args []string) error {
 func (a App) runCommand(ctx context.Context, args []string) error {
 	defaults := defaultConfig()
 	fs := newFlagSet("run", a.Stderr)
-	provider := fs.String("provider", defaults.Provider, "provider: hetzner or aws")
+	provider := fs.String("provider", defaults.Provider, "provider: hetzner, aws, or blacksmith-testbox")
 	profile := fs.String("profile", defaults.Profile, "profile")
 	class := fs.String("class", defaults.Class, "machine class")
 	serverType := fs.String("type", getenv("CRABBOX_SERVER_TYPE", ""), "provider server/instance type")
@@ -154,6 +160,18 @@ func (a App) runCommand(ctx context.Context, args []string) error {
 	repo, err := findRepo()
 	if err != nil {
 		return err
+	}
+	if isBlacksmithProvider(cfg.Provider) {
+		return a.blacksmithRun(ctx, cfg, repo, blacksmithRunOptions{
+			ID:          *leaseIDFlag,
+			Keep:        *keep,
+			Reclaim:     *reclaim,
+			SyncOnly:    *syncOnly,
+			Debug:       *debugSync,
+			ShellMode:   *shellMode,
+			Command:     command,
+			IdleTimeout: cfg.IdleTimeout,
+		})
 	}
 
 	var server Server
@@ -928,7 +946,7 @@ func findServerByAlias(servers []Server, id string) (Server, string, error) {
 
 func (a App) stop(ctx context.Context, args []string) error {
 	fs := newFlagSet("stop", a.Stderr)
-	provider := fs.String("provider", defaultConfig().Provider, "provider: hetzner or aws")
+	provider := fs.String("provider", defaultConfig().Provider, "provider: hetzner, aws, or blacksmith-testbox")
 	if err := parseFlags(fs, args); err != nil {
 		return err
 	}
@@ -940,6 +958,9 @@ func (a App) stop(ctx context.Context, args []string) error {
 		return err
 	}
 	cfg.Provider = *provider
+	if isBlacksmithProvider(cfg.Provider) {
+		return a.blacksmithStop(ctx, cfg, fs.Arg(0))
+	}
 	if coord, ok, err := newCoordinatorClient(cfg); err != nil {
 		return err
 	} else if ok {

@@ -22,7 +22,7 @@ MVP:
 - `crabbox login` opens GitHub, receives a signed user token from the coordinator, and stores it in local config.
 - Workers.dev automation can still use a shared bearer token via `crabbox login --token-stdin`.
 - The CLI sends owner/org headers only for shared-token automation; GitHub login tokens carry owner/org inside the signed token.
-- GitHub browser-login tokens are user tokens, not admin tokens.
+- GitHub browser-login tokens are user tokens, not admin tokens. They can only see and mutate leases, runs, logs, and usage for their own owner/org identity.
 - Missing shared-token config fails closed for non-health coordinator routes.
 
 Target:
@@ -35,9 +35,9 @@ Target:
 Roles:
 
 ```text
-user: acquire, heartbeat, release own leases, list own leases
+user: acquire, heartbeat, release own leases, list own leases/runs/logs/usage
 maintainer: shared warm pool access
-admin: drain machines, cleanup, view all leases, deploy
+admin: drain machines, cleanup, view all leases/runs/pool/usage, deploy
 ```
 
 Until GitHub teams are wired, admin identity can be an explicit allowlist in Worker config.
@@ -71,7 +71,9 @@ Project allowlist example:
 
 MVP SSH posture:
 
-- Public SSH allowed only for worker machines.
+- SSH allowed only for worker machines.
+- AWS broker-created security groups use `CRABBOX_AWS_SSH_CIDRS` when configured, otherwise the Cloudflare request source IP for the lease request.
+- Hetzner direct mode still relies on provider networking/firewall defaults unless a profile supplies tighter controls.
 - Key-only authentication.
 - Dedicated `crabbox` user.
 - No password login.

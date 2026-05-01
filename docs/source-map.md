@@ -31,6 +31,7 @@ This page maps user-facing behavior back to implementation files. Keep docs desc
 
 - Direct Hetzner provider: `internal/cli/hcloud.go`
 - Direct AWS provider: `internal/cli/aws.go`
+- Blacksmith Testbox CLI wrapper: `internal/cli/blacksmith.go`
 - Worker Hetzner provider: `worker/src/hetzner.ts`
 - Worker AWS EC2 Spot provider: `worker/src/aws.ts`
 - CLI cloud-init bootstrap: `internal/cli/bootstrap.go`

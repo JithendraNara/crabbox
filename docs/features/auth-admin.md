@@ -6,7 +6,7 @@ Read when:
 - changing trusted operator controls;
 - debugging who owns a lease or run.
 
-Crabbox supports GitHub browser login for normal users and shared bearer-token login for trusted operator automation. `crabbox login` opens GitHub, the coordinator exchanges the OAuth code, and the CLI stores a signed user token in the user config. `crabbox login --token-stdin` stores the shared operator token instead.
+Crabbox supports GitHub browser login for normal users and shared bearer-token login for trusted operator automation. `crabbox login` opens GitHub, the coordinator exchanges the OAuth code, verifies active membership in the allowed GitHub org, and the CLI stores a signed user token in the user config. `crabbox login --token-stdin` stores the shared operator token instead.
 
 Identity sent to the coordinator:
 
@@ -36,7 +36,21 @@ crabbox admin release blue-lobster
 crabbox admin delete cbx_... --force
 ```
 
-Admin commands require the shared operator token. GitHub browser-login tokens can create and use normal leases, but cannot call admin routes. Do not distribute the shared token to untrusted users.
+Admin commands require the shared operator token. GitHub browser-login tokens can create and use normal leases only after allowed-org membership is verified, but cannot call admin routes.
+
+Normal user tokens are owner/org scoped:
+
+```text
+GET /v1/leases                 own leases only
+GET /v1/leases/{id-or-slug}    exact ID and slug lookup must match owner/org
+POST /v1/leases/{id}/heartbeat own leases only
+POST /v1/leases/{id}/release   own leases only
+GET /v1/runs and logs          own runs only
+GET /v1/usage                  own usage only
+GET /v1/pool                   shared-token admin only
+```
+
+Do not distribute the shared token to untrusted users.
 
 Related docs:
 

@@ -63,6 +63,13 @@ actions:
     - linux-large
   runnerVersion: latest
   ephemeral: false
+blacksmith:
+  org: openclaw
+  workflow: .github/workflows/blacksmith-testbox.yml
+  job: hydrate
+  ref: main
+  idleTimeout: 90m
+  debug: true
 results:
   junit:
     - junit.xml
@@ -121,6 +128,9 @@ ssh:
 	}
 	if cfg.Actions.Ephemeral || len(cfg.Actions.RunnerLabels) != 2 || cfg.Actions.RunnerLabels[1] != "linux-large" {
 		t.Fatalf("actions runner config not loaded: %#v", cfg.Actions)
+	}
+	if cfg.Blacksmith.Org != "openclaw" || cfg.Blacksmith.Workflow != ".github/workflows/blacksmith-testbox.yml" || cfg.Blacksmith.Job != "hydrate" || cfg.Blacksmith.Ref != "main" || cfg.Blacksmith.IdleTimeout != 90*time.Minute || !cfg.Blacksmith.Debug {
+		t.Fatalf("blacksmith config not loaded: %#v", cfg.Blacksmith)
 	}
 	if len(cfg.Results.JUnit) != 1 || cfg.Results.JUnit[0] != "junit.xml" {
 		t.Fatalf("results config not loaded: %#v", cfg.Results)

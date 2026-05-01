@@ -5,16 +5,19 @@
 ```sh
 crabbox warmup --class beast
 crabbox warmup --actions-runner
+crabbox warmup --provider blacksmith-testbox
 ```
 
 The command returns a stable `cbx_...` lease ID and a friendly slug. Reuse either for subsequent `run`, `status`, `ssh`, `inspect`, and `stop` commands; scripts should keep using the canonical ID.
+
+With `--provider blacksmith-testbox`, the canonical ID is the Blacksmith `tbx_...` ID returned by `blacksmith testbox warmup`; Crabbox still assigns and stores a local slug for reuse.
 
 On success, `warmup` prints a concise total duration line.
 
 Flags:
 
 ```text
---provider hetzner|aws
+--provider hetzner|aws|blacksmith-testbox
 --profile <name>
 --class <name>
 --type <provider-type>
@@ -29,6 +32,8 @@ Flags:
 Warmup records a local claim tying the lease to the current repo; `--reclaim` overwrites an existing local claim for that lease.
 
 `--actions-runner` immediately registers the warm box as an ephemeral self-hosted GitHub Actions runner for the current repository. Most projects should prefer `crabbox actions hydrate --id <lease-id-or-slug>` after warmup because it also dispatches the workflow and waits for the ready marker.
+
+`--actions-runner` is not supported with `blacksmith-testbox` because Blacksmith owns Testbox workflow hydration.
 
 New leases use per-lease SSH keys under the user config directory:
 

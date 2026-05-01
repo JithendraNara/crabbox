@@ -11,7 +11,7 @@ import (
 func TestClaimLeaseForRepoWritesAndUpdatesClaim(t *testing.T) {
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
 	repo := filepath.Join(t.TempDir(), "repo")
-	if err := claimLeaseForRepo("cbx_123", "blue-lobster", repo, 30*time.Minute, false); err != nil {
+	if err := claimLeaseForRepoProvider("cbx_123", "blue-lobster", "blacksmith-testbox", repo, 30*time.Minute, false); err != nil {
 		t.Fatal(err)
 	}
 	claim, err := readLeaseClaim("cbx_123")
@@ -20,6 +20,9 @@ func TestClaimLeaseForRepoWritesAndUpdatesClaim(t *testing.T) {
 	}
 	if claim.LeaseID != "cbx_123" || claim.Slug != "blue-lobster" || claim.RepoRoot != repo || claim.IdleTimeoutSeconds != 1800 {
 		t.Fatalf("unexpected claim: %#v", claim)
+	}
+	if claim.Provider != "blacksmith-testbox" {
+		t.Fatalf("provider=%q", claim.Provider)
 	}
 }
 
@@ -97,5 +100,19 @@ func TestReadLeaseClaimRejectsInvalidJSON(t *testing.T) {
 	_, err = readLeaseClaim("cbx_badbadbadbad")
 	if err == nil || !strings.Contains(err.Error(), "parse claim") {
 		t.Fatalf("expected parse claim error, got %v", err)
+	}
+}
+
+func TestResolveLeaseClaimFindsSlug(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	if err := claimLeaseForRepoProvider("tbx_abc123", "Blue Lobster", "blacksmith-testbox", "/repo", time.Minute, false); err != nil {
+		t.Fatal(err)
+	}
+	claim, ok, err := resolveLeaseClaim("blue-lobster")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !ok || claim.LeaseID != "tbx_abc123" || claim.Provider != "blacksmith-testbox" {
+		t.Fatalf("unexpected claim ok=%t claim=%#v", ok, claim)
 	}
 }

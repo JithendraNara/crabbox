@@ -8,7 +8,7 @@ Crabbox is an open-source remote testbox runner for maintainers and AI agents. L
 crabbox run -- pnpm test
 ```
 
-Behind that single command: a Go CLI on your laptop, a Cloudflare Worker broker that owns provider credentials and lease state, and a vanilla Ubuntu runner on Hetzner Cloud or AWS EC2 Spot.
+Behind that single command: a Go CLI on your laptop, a Cloudflare Worker broker that owns provider credentials and lease state, and a vanilla Ubuntu runner on Hetzner Cloud or AWS EC2 Spot. Crabbox can also wrap Blacksmith Testboxes when you choose `provider: blacksmith-testbox`.
 
 ---
 
@@ -68,6 +68,7 @@ For the full mental model, see [How Crabbox Works](docs/how-it-works.md). For th
 - **One-shot or warm.** `crabbox run` for fire-and-forget; `crabbox warmup` + `--id` for repeated runs against the same box.
 - **Local-first sync.** No clean-checkout requirement. Tracked + nonignored files only, fingerprint skip on no-op runs, sanity checks against suspicious mass deletions, optional shallow base-ref hydration for changed-test workflows.
 - **Brokered cloud.** Maintainers and agents share infra without sharing provider tokens. Hetzner and AWS EC2 Spot are first-class; both fall back across instance families when capacity or quota rejects a request.
+- **Blacksmith Testbox wrapper.** Set `provider: blacksmith-testbox` to delegate warmup/run/list/status/stop to the Blacksmith CLI while Crabbox keeps local slugs, repo claims, timing summaries, and config conventions.
 - **Cost guardrails.** Per-lease and monthly spend caps. Live pricing from EC2 Spot history or Hetzner server-type prices, with static fallbacks. `crabbox usage` summarizes spend by user, org, provider, and type.
 - **GitHub Actions hydration.** `crabbox actions hydrate` registers a leased box as an ephemeral Actions runner, so the repo's own workflow installs runtimes, services, and secrets. Crabbox does not parse Actions YAML.
 - **OpenClaw plugin.** The repo root is a native OpenClaw plugin. Agents drive Crabbox through `crabbox_run`, `crabbox_warmup`, `crabbox_status`, `crabbox_list`, and `crabbox_stop` instead of shelling out.
@@ -115,6 +116,18 @@ ssh:
   key: ~/.ssh/id_ed25519
   user: crabbox
   port: "2222"
+```
+
+Optional Blacksmith Testbox wrapper:
+
+```yaml
+provider: blacksmith-testbox
+blacksmith:
+  org: openclaw
+  workflow: .github/workflows/ci-check-testbox.yml
+  job: test
+  ref: main
+  idleTimeout: 90m
 ```
 
 Forwarded environment is intentionally narrow: `NODE_OPTIONS` and `CI`. Do not pass secrets as command-line arguments. Full env-var reference and per-command flags are in [docs/cli.md](docs/cli.md) and [docs/commands/](docs/commands/README.md).
