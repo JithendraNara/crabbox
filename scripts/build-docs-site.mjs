@@ -208,20 +208,24 @@ function layout({ page, html, toc, prev, next, sectionName }) {
   const depth = page.outRel.split("/").length - 1;
   const rootPrefix = depth ? "../".repeat(depth) : "";
   const editUrl = `${repoEditBase}/${page.rel}`;
-  const prevNext = prev || next ? pageNavHtml(prev, next, rootPrefix) : "";
+  const isHome = page.rel === "README.md";
+  const prevNext = !isHome && (prev || next) ? pageNavHtml(prev, next, rootPrefix) : "";
+  const heroBlock = isHome ? landingHero(rootPrefix) : standardHero(page, sectionName, editUrl);
+  const articleClass = isHome ? "doc doc-home" : "doc";
+  const tocBlock = isHome ? "" : toc;
   return `<!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>${escapeHtml(page.title)} · Crabbox Docs</title>
+  <title>${escapeHtml(page.title)} - Crabbox Docs</title>
   <link rel="icon" href="${rootPrefix}crabbox.svg">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Fraunces:wght@600;700&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
   <style>${css()}</style>
 </head>
-<body>
+<body${isHome ? ' class="home"' : ""}>
   <button class="nav-toggle" type="button" aria-label="Toggle navigation" aria-expanded="false">
     <span></span><span></span><span></span>
   </button>
@@ -235,7 +239,20 @@ function layout({ page, html, toc, prev, next, sectionName }) {
       <nav>${navHtml(page.rel, rootPrefix)}</nav>
     </aside>
     <main>
-      <header class="hero">
+      ${heroBlock}
+      <div class="doc-grid${isHome ? " doc-grid-home" : ""}">
+        <article class="${articleClass}">${html}${prevNext}</article>
+        ${tocBlock}
+      </div>
+    </main>
+  </div>
+  <script>${js()}</script>
+</body>
+</html>`;
+}
+
+function standardHero(page, sectionName, editUrl) {
+  return `<header class="hero">
         <div class="hero-text">
           <p class="eyebrow">${escapeHtml(sectionName)}</p>
           <h1>${escapeHtml(page.title)}</h1>
@@ -244,16 +261,37 @@ function layout({ page, html, toc, prev, next, sectionName }) {
           <a class="repo" href="https://github.com/openclaw/crabbox" rel="noopener">GitHub</a>
           <a class="edit" href="${escapeAttr(editUrl)}" rel="noopener">Edit page</a>
         </div>
+      </header>`;
+}
+
+function landingHero(rootPrefix) {
+  const features = [
+    ["Local loop, remote box", "Keep your editor and git workflow. Crabbox rsyncs your dirty checkout to a leased Linux machine and streams the run back."],
+    ["Brokered, not BYO creds", "A Cloudflare Worker holds provider credentials and serializes lease state. Your CLI only carries a bearer token."],
+    ["Cost-aware leases", "TTL-bounded machines, monthly spend caps, and per-user / per-org / per-provider usage from the broker."],
+    ["Reuse what's warm", "<code>crabbox warmup</code> keeps a box hot. Reuse it with <code>--id</code> across runs, SSH, and CI hydration."],
+    ["Hetzner or AWS Spot", "Falls back across server types and instance families when capacity is tight. Direct provider mode stays as a debug fallback."],
+    ["Plays with Actions", "<code>actions hydrate</code> reuses your repository's GitHub Actions setup steps so local runs land in the same hydrated workspace."],
+  ];
+  const cards = features
+    .map(([title, body]) => `<article class="feature"><h3>${escapeHtml(title)}</h3><p>${body}</p></article>`)
+    .join("");
+  return `<header class="hero hero-home">
+        <div class="hero-text">
+          <p class="eyebrow">OpenClaw - remote testbox</p>
+          <h1>A short-lived Linux box for every <em>run</em>.</h1>
+          <p class="lede">Crabbox gives maintainers and agents a fast local loop on shared cloud capacity: lease, sync, run, release. The CLI keeps the developer story simple; a Cloudflare-hosted broker keeps the fleet safe.</p>
+          <div class="cta">
+            <a class="cta-primary" href="${rootPrefix}how-it-works.html">Read the overview</a>
+            <a class="cta-secondary" href="https://github.com/openclaw/crabbox" rel="noopener">View on GitHub</a>
+          </div>
+        </div>
+        <pre class="hero-snippet" aria-hidden="true"><code><span class="prompt">$</span> crabbox run -- pnpm test
+<span class="comment"># lease cbx_8f2 - hetzner cax21 - ready 11s</span>
+<span class="comment"># sync 184 files (1.2 MB)</span>
+<span class="comment"># tests passed in 47s - released</span></code></pre>
       </header>
-      <div class="doc-grid">
-        <article class="doc">${html}${prevNext}</article>
-        ${toc}
-      </div>
-    </main>
-  </div>
-  <script>${js()}</script>
-</body>
-</html>`;
+      <section class="features" aria-label="Highlights">${cards}</section>`;
 }
 
 function pageNavHtml(prev, next, rootPrefix) {
@@ -316,9 +354,38 @@ main{min-width:0;padding:28px clamp(20px,4.5vw,60px) 72px}
 .repo:hover,.edit:hover{border-color:var(--coral);color:var(--coral)}
 .edit{color:var(--muted)}
 
+/* landing hero */
+.hero-home{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,1fr);gap:36px;align-items:center;border-bottom:0;padding:24px 0 12px}
+.hero-home:after{display:none}
+.hero-home .eyebrow{margin-bottom:14px}
+.hero-home h1{font-size:clamp(2.1rem,4.6vw,3.8rem);line-height:1.02;letter-spacing:-.012em;font-weight:700;margin:0 0 16px;max-width:18ch}
+.hero-home h1 em{font-style:italic;color:var(--coral);font-weight:600}
+.lede{margin:0 0 22px;color:#384744;font-size:clamp(1rem,1.25vw,1.1rem);line-height:1.55;max-width:46ch}
+.cta{display:flex;gap:10px;flex-wrap:wrap}
+.cta-primary,.cta-secondary{display:inline-flex;align-items:center;border-radius:9px;padding:10px 16px;font-weight:600;font-size:.93rem;text-decoration:none;transition:transform .15s,box-shadow .15s,background .15s,border-color .15s,color .15s}
+.cta-primary{background:var(--ink);color:var(--paper);border:1px solid var(--ink)}
+.cta-primary:hover{background:var(--reef);border-color:var(--reef);color:var(--paper);transform:translateY(-1px);box-shadow:0 8px 20px rgba(20,95,88,.25)}
+.cta-secondary{border:1px solid var(--ink);color:var(--ink);background:transparent}
+.cta-secondary:hover{border-color:var(--coral);color:var(--coral);transform:translateY(-1px)}
+.hero-snippet{margin:0;background:#0f1c1a;color:#f8efe4;border-radius:12px;padding:22px 22px;font:500 .88rem/1.65 "IBM Plex Mono",ui-monospace,monospace;border:1px solid #0a1513;box-shadow:0 18px 40px rgba(18,33,31,.18);overflow:hidden}
+.hero-snippet code{background:transparent;border:0;padding:0;color:inherit;font:inherit;display:block;white-space:pre}
+.hero-snippet .prompt{color:var(--ochre)}
+.hero-snippet .comment{color:#7e948f}
+
+/* feature grid */
+.features{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:14px;margin:30px 0 8px}
+.feature{background:rgba(255,251,244,.78);border:1px solid var(--line-soft);border-radius:10px;padding:18px 18px 16px;transition:border-color .15s,transform .15s,box-shadow .15s}
+.feature:hover{border-color:var(--coral);transform:translateY(-2px);box-shadow:0 10px 24px rgba(18,33,31,.08)}
+.feature h3{font-family:Fraunces,Georgia,serif;font-size:1.05rem;margin:0 0 6px;font-weight:600;letter-spacing:-.005em;line-height:1.2}
+.feature p{margin:0;color:#384744;font-size:.92rem;line-height:1.5}
+.feature code{font-size:.86em;background:#efe2d0;border:1px solid #e2d2bd;border-radius:5px;padding:.04em .3em}
+
 /* layout: doc + toc */
 .doc-grid{display:grid;grid-template-columns:minmax(0,1fr);gap:36px;margin-top:30px}
-@media(min-width:1180px){.doc-grid{grid-template-columns:minmax(0,1fr) 200px}}
+.doc-grid-home{margin-top:14px}
+.doc-home{background:transparent;box-shadow:none;border:0;padding:8px 0 0}
+.doc-home>:first-child{margin-top:0}
+@media(min-width:1180px){.doc-grid{grid-template-columns:minmax(0,1fr) 200px}.doc-grid-home{grid-template-columns:minmax(0,1fr)}}
 .doc{min-width:0;background:rgba(255,251,244,.78);box-shadow:var(--shadow);border:1px solid var(--line-soft);border-radius:10px;padding:clamp(22px,3.6vw,44px);overflow-wrap:break-word}
 .doc h1{display:none}
 .doc h2{font-family:Fraunces,Georgia,serif;font-size:1.65rem;line-height:1.15;margin:1.9em 0 .5em;font-weight:600;letter-spacing:-.005em;position:relative}
@@ -387,7 +454,12 @@ main{min-width:0;padding:28px clamp(20px,4.5vw,60px) 72px}
   .hero{padding-top:8px}
   .hero h1{font-size:clamp(1.7rem,7vw,2.2rem)}
   .hero-meta{width:100%;justify-content:flex-start}
+  .hero-home{grid-template-columns:1fr;gap:22px}
+  .hero-home h1{font-size:clamp(2rem,8vw,2.6rem);max-width:none}
+  .hero-snippet{font-size:.78rem;padding:16px 16px}
+  .features{grid-template-columns:1fr;margin-top:22px}
   .doc{padding:20px;border-radius:8px}
+  .doc-home{padding:0}
   .doc-grid{margin-top:22px;gap:24px}
   .doc :is(h2,h3,h4) .anchor{display:none}
 }
