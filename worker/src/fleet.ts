@@ -11,6 +11,8 @@ import type {
   RunCreateRequest,
   RunFinishRequest,
   RunRecord,
+  TestFailure,
+  TestResultSummary,
 } from "./types";
 import { costLimits, enforceCostLimits, leaseCost, requestOrg, usageSummary } from "./usage";
 
@@ -335,7 +337,7 @@ export class FleetDurableObject implements DurableObject {
     run.logBytes = new TextEncoder().encode(log).byteLength;
     run.logTruncated = Boolean(input.logTruncated);
     if (input.results) {
-      run.results = input.results;
+      run.results = boundedTestResults(input.results);
     }
     await this.state.storage.put(runLogKey(runID), log);
     await this.putRun(run);
@@ -514,6 +516,55 @@ function clampLimit(value: string | null, fallback: number): number {
 
 function finiteNumber(value: number | undefined): number | undefined {
   return Number.isFinite(value) ? value : undefined;
+}
+
+const MAX_RESULT_FILES = 50;
+const MAX_RESULT_FAILURES = 100;
+const MAX_RESULT_STRING_BYTES = 4096;
+
+function boundedTestResults(results: TestResultSummary): TestResultSummary {
+  return {
+    ...results,
+    files: results.files
+      .slice(0, MAX_RESULT_FILES)
+      .map((file) => truncateString(file, MAX_RESULT_STRING_BYTES)),
+    failed: results.failed.slice(0, MAX_RESULT_FAILURES).map(boundedTestFailure),
+  };
+}
+
+function boundedTestFailure(failure: TestFailure): TestFailure {
+  const out: TestFailure = {
+    suite: truncateString(failure.suite, MAX_RESULT_STRING_BYTES),
+    name: truncateString(failure.name, MAX_RESULT_STRING_BYTES),
+    kind: failure.kind,
+  };
+  if (failure.classname) {
+    out.classname = truncateString(failure.classname, MAX_RESULT_STRING_BYTES);
+  }
+  if (failure.file) {
+    out.file = truncateString(failure.file, MAX_RESULT_STRING_BYTES);
+  }
+  if (failure.message) {
+    out.message = truncateString(failure.message, MAX_RESULT_STRING_BYTES);
+  }
+  if (failure.type) {
+    out.type = truncateString(failure.type, MAX_RESULT_STRING_BYTES);
+  }
+  return out;
+}
+
+function truncateString(value: string, maxBytes: number): string {
+  const encoder = new TextEncoder();
+  const bytes = encoder.encode(value);
+  if (bytes.byteLength <= maxBytes) {
+    return value;
+  }
+  const decoder = new TextDecoder();
+  let out = decoder.decode(bytes.slice(0, maxBytes));
+  while (encoder.encode(out).byteLength > maxBytes) {
+    out = out.slice(0, -1);
+  }
+  return out;
 }
 
 function leaseTTLSeconds(lease: LeaseRecord): number {

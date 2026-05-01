@@ -23,7 +23,7 @@ results:
     - reports/junit.xml
 ```
 
-Human output shows totals and failed test cases. JSON output returns the stored summary.
+Human output shows totals and failed test cases. JSON output returns the stored summary. Stored summaries keep aggregate counts but cap bulky failure details.
 
 Related docs:
 

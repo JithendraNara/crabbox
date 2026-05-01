@@ -319,26 +319,31 @@ func normalizeGitRemoteURL(remoteURL string) string {
 }
 
 func remoteReadSyncFingerprint(workdir string) string {
-	return "cat " + shellQuote(workdir+"/.crabbox/sync-fingerprint") + " 2>/dev/null || true"
+	script := "cd " + shellQuote(workdir) + " && " + remoteSyncMetaDirScript() + "cat \"$meta_dir/sync-fingerprint\" 2>/dev/null || true"
+	return "bash -lc " + shellQuote(script)
 }
 
 func remoteWriteSyncFingerprint(workdir, fingerprint string) string {
-	return "mkdir -p " + shellQuote(workdir+"/.crabbox") + " && printf %s " + shellQuote(fingerprint) + " > " + shellQuote(workdir+"/.crabbox/sync-fingerprint")
+	script := "cd " + shellQuote(workdir) + " && " + remoteSyncMetaDirScript() + "mkdir -p \"$meta_dir\" && printf %s " + shellQuote(fingerprint) + " > \"$meta_dir/sync-fingerprint\""
+	return "bash -lc " + shellQuote(script)
 }
 
 func remoteWriteSyncManifestNew(workdir string) string {
-	return "mkdir -p " + shellQuote(workdir+"/.crabbox") + " && cat > " + shellQuote(workdir+"/.crabbox/sync-manifest.new")
+	script := "cd " + shellQuote(workdir) + " && " + remoteSyncMetaDirScript() + "mkdir -p \"$meta_dir\" && cat > \"$meta_dir/sync-manifest.new\""
+	return "bash -lc " + shellQuote(script)
 }
 
 func remoteWriteSyncDeletedNew(workdir string) string {
-	return "mkdir -p " + shellQuote(workdir+"/.crabbox") + " && cat > " + shellQuote(workdir+"/.crabbox/sync-deleted.new")
+	script := "cd " + shellQuote(workdir) + " && " + remoteSyncMetaDirScript() + "mkdir -p \"$meta_dir\" && cat > \"$meta_dir/sync-deleted.new\""
+	return "bash -lc " + shellQuote(script)
 }
 
 func remotePruneSyncManifest(workdir string) string {
 	script := "set -e\ncd " + shellQuote(workdir) + `
-old=.crabbox/sync-manifest
-new=.crabbox/sync-manifest.new
-deleted=.crabbox/sync-deleted.new
+` + remoteSyncMetaDirScript() + `
+old="$meta_dir/sync-manifest"
+new="$meta_dir/sync-manifest.new"
+deleted="$meta_dir/sync-deleted.new"
 delete_paths() {
   while IFS= read -r -d '' rel; do
     case "$rel" in ''|/*|../*|*/../*) continue ;; esac
@@ -374,8 +379,12 @@ if [ -f "$old" ] && [ -f "$new" ]; then manifest_removed_paths | delete_paths; f
 }
 
 func remoteApplySyncManifest(workdir string) string {
-	script := "set -e; cd " + shellQuote(workdir) + "; mkdir -p .crabbox; new=.crabbox/sync-manifest.new; deleted=.crabbox/sync-deleted.new; rm -f \"$deleted\"; mv \"$new\" .crabbox/sync-manifest"
+	script := "set -e; cd " + shellQuote(workdir) + "; " + remoteSyncMetaDirScript() + "mkdir -p \"$meta_dir\"; new=\"$meta_dir/sync-manifest.new\"; deleted=\"$meta_dir/sync-deleted.new\"; rm -f \"$deleted\"; mv \"$new\" \"$meta_dir/sync-manifest\""
 	return "bash -lc " + shellQuote(script)
+}
+
+func remoteSyncMetaDirScript() string {
+	return "meta_dir=$(if [ -d .git ]; then printf %s .git/crabbox; else printf %s .crabbox; fi); "
 }
 
 func remoteSyncSanity(workdir string, allowMassDeletions bool) string {

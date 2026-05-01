@@ -360,7 +360,7 @@ CRABBOX_SYNC_WARN_FILES/BYTES    large-sync warning thresholds
 CRABBOX_SYNC_FAIL_FILES/BYTES    large-sync failure thresholds
 CRABBOX_SYNC_ALLOW_LARGE         bypass large-sync failure thresholds
 CRABBOX_RESULTS_JUNIT            comma-separated remote JUnit XML paths
-CRABBOX_CACHE_PNPM/NPM/DOCKER/GIT opt into/out of cache kinds
+CRABBOX_CACHE_PNPM/NPM/DOCKER/GIT opt into/out of cache command kinds
 CRABBOX_CACHE_MAX_GB             cache policy size hint
 CRABBOX_CACHE_PURGE_ON_RELEASE   purge cache on release policy hint
 CRABBOX_ENV_ALLOW                comma-separated env allowlist

@@ -44,11 +44,11 @@ func (a App) cacheStats(ctx context.Context, args []string) error {
 	if *id == "" {
 		return exit(2, "usage: crabbox cache stats --id <lease-id>")
 	}
-	target, _, err := a.cacheTarget(ctx, *id)
+	target, cfg, err := a.cacheTarget(ctx, *id)
 	if err != nil {
 		return err
 	}
-	out, err := runSSHOutput(ctx, target, remoteCacheStats())
+	out, err := runSSHOutput(ctx, target, remoteCacheStats(enabledCacheKinds(cfg.Cache)))
 	if err != nil {
 		return err
 	}
@@ -83,11 +83,15 @@ func (a App) cachePurge(ctx context.Context, args []string) error {
 	if !*force {
 		return exit(2, "cache purge requires --force")
 	}
-	target, _, err := a.cacheTarget(ctx, *id)
+	target, cfg, err := a.cacheTarget(ctx, *id)
 	if err != nil {
 		return err
 	}
-	if err := runSSHQuiet(ctx, target, remoteCachePurge(*kind)); err != nil {
+	enabled := enabledCacheKinds(cfg.Cache)
+	if *kind != "all" && !enabled[*kind] {
+		return exit(2, "cache kind %q is disabled by config", *kind)
+	}
+	if err := runSSHQuiet(ctx, target, remoteCachePurge(*kind, enabled)); err != nil {
 		return err
 	}
 	fmt.Fprintf(a.Stdout, "purged cache kind=%s lease=%s\n", *kind, *id)
@@ -119,7 +123,13 @@ func (a App) cacheWarm(ctx context.Context, args []string) error {
 		return err
 	}
 	workdir := filepath.ToSlash(filepath.Join(cfg.WorkRoot, *id, repo.Name))
-	code := runSSHStream(ctx, target, remoteCommand(workdir, allowedEnv(cfg.EnvAllow), command), a.Stdout, a.Stderr)
+	actionsEnvFile := ""
+	if state, err := readActionsHydrationState(ctx, target, *id); err == nil && state.Workspace != "" {
+		workdir = state.Workspace
+		actionsEnvFile = state.EnvFile
+		fmt.Fprintf(a.Stderr, "using GitHub Actions workspace %s\n", workdir)
+	}
+	code := runSSHStream(ctx, target, remoteCacheWarmCommand(workdir, allowedEnv(cfg.EnvAllow), actionsEnvFile, command), a.Stdout, a.Stderr)
 	if code != 0 {
 		return ExitError{Code: code, Message: fmt.Sprintf("cache warm command exited %d", code)}
 	}
@@ -135,25 +145,79 @@ func (a App) cacheTarget(ctx context.Context, id string) (SSHTarget, Config, err
 	return target, cfg, err
 }
 
-func remoteCacheStats() string {
-	return "for item in pnpm:/var/cache/crabbox/pnpm npm:/var/cache/crabbox/npm git:/var/cache/crabbox/git; do kind=${item%%:*}; path=${item#*:}; if [ -e \"$path\" ]; then bytes=$(du -sk \"$path\" 2>/dev/null | awk '{print $1*1024}'); printf '%s\\t%s\\t%s\\n' \"$kind\" \"$path\" \"${bytes:-0}\"; fi; done; if command -v docker >/dev/null 2>&1; then printf 'docker\\t\\t%s\\n' \"$(docker system df --format '{{.Type}}={{.Size}}' 2>/dev/null | paste -sd ',' -)\"; fi"
+func enabledCacheKinds(cfg CacheConfig) map[string]bool {
+	return map[string]bool{
+		"pnpm":   cfg.Pnpm,
+		"npm":    cfg.Npm,
+		"docker": cfg.Docker,
+		"git":    cfg.Git,
+	}
 }
 
-func remoteCachePurge(kind string) string {
+func remoteCacheStats(enabled map[string]bool) string {
+	items := []string{}
+	if enabled["pnpm"] {
+		items = append(items, "pnpm:/var/cache/crabbox/pnpm")
+	}
+	if enabled["npm"] {
+		items = append(items, "npm:/var/cache/crabbox/npm")
+	}
+	if enabled["git"] {
+		items = append(items, "git:/var/cache/crabbox/git")
+	}
+	var b strings.Builder
+	if len(items) > 0 {
+		b.WriteString("for item in")
+		for _, item := range items {
+			b.WriteByte(' ')
+			b.WriteString(shellQuote(item))
+		}
+		b.WriteString("; do kind=${item%%:*}; path=${item#*:}; if [ -e \"$path\" ]; then bytes=$(du -sk \"$path\" 2>/dev/null | awk '{print $1*1024}'); printf '%s\\t%s\\t%s\\n' \"$kind\" \"$path\" \"${bytes:-0}\"; fi; done; ")
+	}
+	if enabled["docker"] {
+		b.WriteString("if command -v docker >/dev/null 2>&1; then printf 'docker\\t\\t%s\\n' \"$(docker system df --format '{{.Type}}={{.Size}}' 2>/dev/null | paste -sd ',' -)\"; fi")
+	}
+	if b.Len() == 0 {
+		return "true"
+	}
+	return b.String()
+}
+
+func remoteCacheWarmCommand(workdir string, env map[string]string, envFile string, command []string) string {
+	return remoteCommandWithEnvFile(workdir, env, envFile, command)
+}
+
+func remoteCachePurge(kind string, enabled map[string]bool) string {
+	if kind != "all" && !enabled[kind] {
+		return "false"
+	}
+	commands := []string{}
+	add := func(cacheKind, command string) {
+		if enabled[cacheKind] {
+			commands = append(commands, command)
+		}
+	}
 	switch kind {
 	case "pnpm":
-		return "rm -rf /var/cache/crabbox/pnpm/*"
+		add("pnpm", "rm -rf /var/cache/crabbox/pnpm/*")
 	case "npm":
-		return "rm -rf /var/cache/crabbox/npm/*"
+		add("npm", "rm -rf /var/cache/crabbox/npm/*")
 	case "git":
-		return "rm -rf /var/cache/crabbox/git/*"
+		add("git", "rm -rf /var/cache/crabbox/git/*")
 	case "docker":
-		return "docker system prune -af >/dev/null 2>&1 || true"
+		add("docker", "docker system prune -af >/dev/null 2>&1 || true")
 	case "all":
-		return "rm -rf /var/cache/crabbox/pnpm/* /var/cache/crabbox/npm/* /var/cache/crabbox/git/*; docker system prune -af >/dev/null 2>&1 || true"
+		add("pnpm", "rm -rf /var/cache/crabbox/pnpm/*")
+		add("npm", "rm -rf /var/cache/crabbox/npm/*")
+		add("git", "rm -rf /var/cache/crabbox/git/*")
+		add("docker", "docker system prune -af >/dev/null 2>&1 || true")
 	default:
 		return "false"
 	}
+	if len(commands) == 0 {
+		return "true"
+	}
+	return strings.Join(commands, "; ")
 }
 
 func parseCacheStats(output string) []cacheEntry {

@@ -85,6 +85,58 @@ describe("fleet run history", () => {
     const logs = await fleet.fetch(request("GET", `/v1/runs/${run.id}/logs`));
     expect(await logs.text()).toBe("ok\n");
   });
+
+  it("bounds stored result summaries", async () => {
+    const fleet = testFleet();
+    const create = await fleet.fetch(
+      request("POST", "/v1/runs", {
+        body: {
+          leaseID: "cbx_000000000001",
+          provider: "aws",
+          class: "beast",
+          serverType: "c7a.48xlarge",
+          command: ["go", "test", "./..."],
+        },
+      }),
+    );
+    expect(create.status).toBe(201);
+    const { run } = (await create.json()) as { run: { id: string } };
+    const failed = Array.from({ length: 150 }, (_, index) => ({
+      suite: "pkg",
+      name: `fails-${index}`,
+      kind: "failure" as const,
+      message: "x".repeat(5000),
+    }));
+
+    const finish = await fleet.fetch(
+      request("POST", `/v1/runs/${run.id}/finish`, {
+        body: {
+          exitCode: 1,
+          log: "",
+          results: {
+            format: "junit",
+            files: Array.from({ length: 80 }, (_, index) => `junit-${index}.xml`),
+            suites: 1,
+            tests: 150,
+            failures: 150,
+            errors: 0,
+            skipped: 0,
+            timeSeconds: 1.2,
+            failed,
+          },
+        },
+      }),
+    );
+    expect(finish.status).toBe(200);
+    const finished = (await finish.json()) as {
+      run: { results?: { files: string[]; failed: Array<{ message?: string }> } };
+    };
+    expect(finished.run.results?.files).toHaveLength(50);
+    expect(finished.run.results?.failed).toHaveLength(100);
+    expect(
+      new TextEncoder().encode(finished.run.results?.failed[0]?.message ?? "").byteLength,
+    ).toBe(4096);
+  });
 });
 
 describe("fleet identity", () => {

@@ -27,6 +27,8 @@ cache:
   purgeOnRelease: false
 ```
 
+The per-kind toggles control `cache stats` and `cache purge`. Disabled kinds are omitted from stats output and are not purged by `--kind all`; asking to purge a disabled specific kind fails early. Bootstrap may still create shared cache directories because they are harmless runner scaffolding.
+
 Commands:
 
 ```sh

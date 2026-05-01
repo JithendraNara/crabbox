@@ -43,9 +43,12 @@ Initial Crabbox release.
 - `doctor` accepts per-lease SSH keys as the default posture and validates explicit `CRABBOX_SSH_KEY` only when set.
 - Coordinator requests bound dial/TLS timeouts and fall back to local `curl` on transport failures.
 - Local per-lease SSH keys move with coordinator-renamed lease IDs.
+- Cache stats and purge honor repo cache-kind toggles.
+- Stored test-result summaries are bounded before run history persistence.
 
 ### Fixed
 
 - Config-writing commands honor `CRABBOX_CONFIG`, so isolated login/logout tests do not touch the normal user config.
 - Boolean flags for `logs` and admin lease actions work after positional IDs, such as `crabbox logs run_... --json`.
 - `actions hydrate` retries without optional `crabbox_job` when an older workflow ref rejects the input.
+- `cache warm` uses the hydrated GitHub Actions workspace and env handoff when a lease was prepared by `actions hydrate`.

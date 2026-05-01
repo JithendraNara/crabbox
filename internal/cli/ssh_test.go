@@ -126,7 +126,7 @@ func TestRemotePruneSyncManifestDeletesOnlyManagedPaths(t *testing.T) {
 		"python3 -",
 		"rm -f --",
 		"rmdir --",
-		".crabbox/sync-manifest.new",
+		"sync-manifest.new",
 	} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("remotePruneSyncManifest missing %q in %q", want, got)
@@ -194,22 +194,40 @@ func TestRemoteApplySyncManifestOnlyCommitsManifest(t *testing.T) {
 	if strings.Contains(got, "manifest_removed_paths") || strings.Contains(got, "delete_paths") {
 		t.Fatalf("remoteApplySyncManifest should not delete after rsync: %q", got)
 	}
-	if !strings.Contains(got, "mv \"$new\" .crabbox/sync-manifest") {
+	if !strings.Contains(got, "mv \"$new\" \"$meta_dir/sync-manifest\"") {
 		t.Fatalf("remoteApplySyncManifest should commit new manifest: %q", got)
 	}
 }
 
 func TestRemoteWriteSyncManifestNew(t *testing.T) {
 	got := remoteWriteSyncManifestNew("/work/repo")
-	if !strings.Contains(got, "cat > '/work/repo/.crabbox/sync-manifest.new'") {
+	if !strings.Contains(got, "cat > \"$meta_dir/sync-manifest.new\"") {
 		t.Fatalf("unexpected manifest write command: %q", got)
 	}
 }
 
 func TestRemoteWriteSyncDeletedNew(t *testing.T) {
 	got := remoteWriteSyncDeletedNew("/work/repo")
-	if !strings.Contains(got, "cat > '/work/repo/.crabbox/sync-deleted.new'") {
+	if !strings.Contains(got, "cat > \"$meta_dir/sync-deleted.new\"") {
 		t.Fatalf("unexpected deleted manifest write command: %q", got)
+	}
+}
+
+func TestRemoteSyncMetadataUsesGitDirForGitWorktree(t *testing.T) {
+	workdir := t.TempDir()
+	if err := os.Mkdir(filepath.Join(workdir, ".git"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	cmd := exec.Command("bash", "-lc", remoteWriteSyncManifestNew(workdir))
+	cmd.Stdin = strings.NewReader("tracked.txt\x00")
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("write manifest failed: %v\n%s", err, out)
+	}
+	if _, err := os.Stat(filepath.Join(workdir, ".git", "crabbox", "sync-manifest.new")); err != nil {
+		t.Fatalf("manifest should be written under .git/crabbox: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(workdir, ".crabbox")); !os.IsNotExist(err) {
+		t.Fatalf("worktree .crabbox should not be created, stat err=%v", err)
 	}
 }
 

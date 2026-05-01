@@ -19,7 +19,9 @@ git
 all
 ```
 
-`cache warm` runs a command in the synced repo workdir for that lease. It is intended for kept or hydrated boxes where the repo already exists remotely.
+`cache warm` runs a command in the synced repo workdir for that lease. On boxes prepared by `crabbox actions hydrate`, it uses the hydrated `$GITHUB_WORKSPACE` and sources the workflow env handoff like `crabbox run`.
+
+Repo `cache.pnpm`, `cache.npm`, `cache.docker`, and `cache.git` toggles control which kinds `stats` reports and which kinds `purge --kind all` removes.
 
 Related docs:
 

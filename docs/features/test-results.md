@@ -23,7 +23,7 @@ results:
     - reports/junit.xml
 ```
 
-After the command exits, the CLI reads those remote files from the workdir, parses JUnit, and sends only the summary to the coordinator. Raw XML is not stored.
+After the command exits, the CLI reads those remote files from the workdir, parses JUnit, and sends only the summary to the coordinator. Raw XML is not stored. The coordinator caps stored file lists, failed-case entries, and long strings so a huge report cannot exceed Durable Object storage or response limits.
 
 Use:
 
