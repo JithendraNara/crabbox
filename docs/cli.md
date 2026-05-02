@@ -33,8 +33,8 @@ crabbox init [--force]
 crabbox config show [--json]
 crabbox config path
 crabbox config set-broker --url <url> --token-stdin [--provider hetzner|aws]
-crabbox warmup [--provider hetzner|aws|blacksmith-testbox] [--profile <name>] [--idle-timeout <duration>]
-crabbox run [--id <lease-id-or-slug>] [--shell] [--checksum] [--debug] [--force-sync-large] [--blacksmith-workflow <workflow>] -- <command...>
+crabbox warmup [--provider hetzner|aws|blacksmith-testbox] [--profile <name>] [--idle-timeout <duration>] [--timing-json]
+crabbox run [--id <lease-id-or-slug>] [--shell] [--checksum] [--debug] [--force-sync-large] [--timing-json] [--blacksmith-workflow <workflow>] -- <command...>
 crabbox sync-plan [--limit <n>]
 crabbox history [--lease <lease-id>] [--owner <email>] [--org <name>] [--limit <n>] [--json]
 crabbox logs <run-id> [--json]
@@ -42,7 +42,7 @@ crabbox results <run-id> [--json]
 crabbox cache stats --id <lease-id-or-slug> [--json]
 crabbox cache purge --id <lease-id-or-slug> --kind pnpm|npm|docker|git|all --force
 crabbox cache warm --id <lease-id-or-slug> -- <command...>
-crabbox actions hydrate --id <lease-id-or-slug> [--workflow <file|name|id>] [--wait-timeout <duration>]
+crabbox actions hydrate --id <lease-id-or-slug> [--workflow <file|name|id>] [--wait-timeout <duration>] [--timing-json]
 crabbox actions register --id <lease-id-or-slug> [--repo owner/name]
 crabbox actions dispatch [--workflow <file|name|id>] [-f key=value]
 crabbox status --id <lease-id-or-slug> [--wait]
@@ -210,6 +210,7 @@ Flags:
 --debug                 print sync timing and itemized rsync output
 --junit <paths>         comma-separated remote JUnit XML paths to attach to run history
 --reclaim              claim an existing lease for the current repo
+--timing-json          print a final JSON timing record
 --blacksmith-org <org>  Blacksmith organization
 --blacksmith-workflow <file|name|id> Blacksmith Testbox workflow
 --blacksmith-job <job>  Blacksmith Testbox workflow job

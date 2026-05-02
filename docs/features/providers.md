@@ -28,10 +28,13 @@ AWS behavior:
 - creates or reuses the `crabbox-runners` security group with SSH ingress limited to configured CIDRs or the request source IP;
 - launches one-time Spot instances;
 - tags instances, volumes, and Spot requests;
-- falls back across broad C/M/R instance families;
+- falls back across broad C/M/R instance families for class requests, including account policy and capacity rejections;
+- can fall back to a small burstable type when account policy rejects the high-core class candidates;
 - uses Spot placement score across configured regions in direct AWS mode;
 - can fall back to On-Demand after Spot capacity/quota failures when configured;
 - fetches Spot price history when cost estimates need provider pricing.
+
+Explicit `--type` requests are treated as exact provider type requests. If that type is rejected, Crabbox fails clearly instead of silently choosing a different instance type. Remove `--type` and use a machine class when fallback is desired.
 
 Machine classes map to provider-specific types:
 

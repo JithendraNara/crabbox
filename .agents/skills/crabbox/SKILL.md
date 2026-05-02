@@ -14,6 +14,8 @@ local checkout.
 - Run from the repository root. Crabbox sync mirrors the current checkout.
 - Prefer local targeted tests for tight edit loops.
 - Check repo-local `crabbox.yaml` or `.crabbox.yaml` before adding flags.
+- Sanity-check the selected binary before remote work:
+  `command -v crabbox && crabbox --version && crabbox --help | sed -n '1,80p'`.
 - Install with `brew install openclaw/tap/crabbox`.
 - Auth is required for brokered operation. Normal users run `crabbox login`.
 - Trusted operator automation can store the shared token with:
@@ -50,6 +52,10 @@ crabbox run --id <cbx_id-or-slug> -- pnpm test:changed
 crabbox run --id <cbx_id-or-slug> --shell "corepack enable && pnpm install --frozen-lockfile && pnpm test"
 ```
 
+For package-manager commands on raw AWS/Hetzner boxes, hydrate first when the
+repo declares an Actions workflow; bootstrap only installs Crabbox plumbing, not
+project runtimes. Add `--timing-json` when comparing providers or sync phases.
+
 Stop boxes you created before handoff:
 
 ```sh
@@ -72,6 +78,8 @@ CRABBOX_LIVE=1 CRABBOX_LIVE_REPO=/path/to/openclaw scripts/live-smoke.sh
 ```
 
 Use `--debug` on `run` when measuring sync timing.
+Use `--timing-json` on `warmup`, `actions hydrate`, and `run` when a stable
+machine-readable timing record is needed.
 
 ## Hydration Boundary
 

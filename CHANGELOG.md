@@ -6,6 +6,8 @@ Crabbox 0.3.0 adds the first trusted-operator image lifecycle for AWS runners: o
 
 ### Added
 
+- Added `--timing-json` for `warmup`, `actions hydrate`, and `run` so provider comparisons can read stable sync, command, total, exit-code, and Actions run timing from one JSON record.
+- Added Blacksmith Testbox timing JSON output that reports delegated sync in the same schema as AWS and Hetzner runs.
 - Added the Access-protected coordinator route `https://crabbox-access.openclaw.ai` for service-token proof and hardened automation.
 - Added separate coordinator admin-token auth so shared operator tokens no longer grant admin routes.
 - Added Cloudflare Access JWT verification before Access identity can affect bearer-token ownership.
@@ -21,6 +23,8 @@ Crabbox 0.3.0 adds the first trusted-operator image lifecycle for AWS runners: o
 
 ### Changed
 
+- Brokered AWS class requests now fall back through provider candidates, account-policy launch rejections, and a small burstable fallback instead of failing on the first Free Tier-ineligible high-core type.
+- Hydrated runs now skip the expensive Git base-ref hydration fetch when the remote base is already current enough for the local base SHA.
 - Brokered AWS lease creation now uses the promoted AWS image when no explicit `awsAMI` or `CRABBOX_AWS_AMI` override is supplied.
 - Image route validation now rejects noncanonical lease IDs, invalid AMI IDs, invalid AMI names, non-AWS leases, and promotion attempts before an image reaches `available`.
 - Moved the deployed coordinator route to the OpenClaw Cloudflare account at `https://crabbox.openclaw.ai` and scoped default broker org/auth settings to `openclaw`.
@@ -28,6 +32,8 @@ Crabbox 0.3.0 adds the first trusted-operator image lifecycle for AWS runners: o
 
 ### Fixed
 
+- Preserved explicit AWS `--type` requests as exact instance-type requests; Crabbox now fails clearly instead of silently falling back when the user asked for a specific type.
+- Warned before running JavaScript package-manager commands on an unhydrated raw box when the repo declares an Actions hydration workflow.
 - Fixed responsive padding on the generated docs-site frontpage body content.
 - Fixed brokered AWS security-group creation by sending EC2's required `GroupDescription` parameter, restoring first-run AWS provisioning in fresh accounts.
 - Fixed coordinator warmup waits to keep touching the lease during slow bootstrap so short idle timeouts do not release a box while the foreground CLI is still waiting.

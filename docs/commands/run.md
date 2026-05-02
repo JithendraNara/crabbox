@@ -16,11 +16,15 @@ With `--provider blacksmith-testbox`, `--id` accepts a Blacksmith `tbx_...` ID o
 
 When the lease has been hydrated by `crabbox actions hydrate`, `run` reads the remote marker under `$HOME/.crabbox/actions`, syncs into the workflow's `$GITHUB_WORKSPACE`, and sources the non-secret env file written by the workflow. That preserves the setup the workflow performed: checkout path, installed dependencies, service containers, caches, runner temp/toolcache paths, and any project-specific preparation. GitHub secrets and OIDC request tokens remain workflow-step scoped unless the project explicitly persists its own short-lived credentials.
 
+If a configured Actions hydration workflow exists and a package-manager command such as `pnpm`, `npm`, `node`, or `corepack` is run before a hydration marker exists, Crabbox warns that the raw box may not have the project runtime installed. Hydrate first for CI-like setup, or include the runtime setup explicitly in the command.
+
 Sync uses `git ls-files --cached --others --exclude-standard` to build a file manifest, then feeds that manifest to rsync over SSH. That means tracked files plus nonignored untracked files sync, while `.git`, ignored local build output, dependency folders, and common caches stay out of the transfer. Crabbox records a local/remote sync fingerprint and skips rsync when the tracked commit plus manifest and dirty metadata have not changed. Use `--checksum` when you need a paranoid checksum scan, and `--debug` to print sync timing, progress, and itemized rsync output.
 
 Before rsync starts, Crabbox prints the candidate file count and byte estimate. Large syncs warn or fail according to `sync.warnFiles`, `sync.warnBytes`, `sync.failFiles`, and `sync.failBytes`; use `--force-sync-large` or `sync.allowLarge: true` only when the transfer size is intentional. Quiet rsync runs print a heartbeat, and `sync.timeout` kills stalled syncs.
 
 At the end of every command, `run` prints a one-line summary with sync duration, command duration, total duration, whether sync was skipped by fingerprint, and the remote exit code.
+
+Use `--timing-json` to emit a final JSON timing record with provider, lease ID, sync phases, command duration, total duration, exit code, and Actions run URL when available. In `blacksmith-testbox` mode, sync is reported as delegated in the same schema.
 
 Before the first rsync into a Git checkout, Crabbox tries to seed the remote worktree from the local `origin` remote so the first sync is a dirty-tree overlay instead of a full source upload. Project-specific excludes, env forwarding, and base ref belong in `crabbox.yaml` or `.crabbox.yaml`.
 
@@ -51,6 +55,7 @@ Flags:
 --debug
 --junit <comma-separated remote XML paths>
 --reclaim
+--timing-json
 --blacksmith-org <org>
 --blacksmith-workflow <file|name|id>
 --blacksmith-job <job>

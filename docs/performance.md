@@ -52,6 +52,8 @@ pnpm check:changed
 git diff --name-only origin/main...
 ```
 
+When a box is already Actions-hydrated and the remote checkout already has the configured base ref at the same SHA as the local `origin/<baseRef>`, Crabbox skips the extra Git hydration fetch and records the skip reason in the sync summary. This keeps dirty-overlay reruns focused on rsync plus the command instead of repeatedly fetching base history.
+
 ## Package And Tool Caches
 
 Runner bootstrap prepares shared cache directories, but does not install project runtimes. Package-manager and Docker caches are best-effort speedups once the repository setup installs those tools; they must not be treated as source of truth.
@@ -84,7 +86,7 @@ Typical choices:
 - `large`: broad test shards or heavy builds.
 - `beast`: high-core changed-test runs.
 
-Hetzner dedicated classes can hit account quota. AWS Spot classes can hit regional capacity. For AWS, `CRABBOX_CAPACITY_STRATEGY=most-available` and multiple `CRABBOX_CAPACITY_REGIONS` give the coordinator more room to find capacity.
+Hetzner dedicated classes can hit account quota. AWS Spot classes can hit regional capacity or account policy limits. For AWS, class requests try the configured high-core candidates first and can fall back to a small burstable type when the account rejects those candidates. `CRABBOX_CAPACITY_STRATEGY=most-available` and multiple `CRABBOX_CAPACITY_REGIONS` give the coordinator more room to find capacity.
 
 ## Measure The Loop
 
@@ -94,4 +96,4 @@ Use wall-clock timing around the whole command, not just the remote test process
 /usr/bin/time -p bin/crabbox run --id cbx_... -- pnpm test:changed:max
 ```
 
-The useful number includes lease wait, SSH readiness, sync, Git hydration, command execution, and release. For warm leases, sync fingerprints and package caches should make repeated runs much faster than cold runs.
+The useful number includes lease wait, SSH readiness, sync, Git hydration, command execution, and release. Add `--timing-json` when comparing providers or checking whether a run paid for `rsync`, `git_hydrate`, or only the remote command. For warm leases, sync fingerprints and package caches should make repeated runs much faster than cold runs.

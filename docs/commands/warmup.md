@@ -12,7 +12,7 @@ The command returns a stable `cbx_...` lease ID and a friendly slug. Reuse eithe
 
 With `--provider blacksmith-testbox`, the canonical ID is the Blacksmith `tbx_...` ID returned by `blacksmith testbox warmup`; Crabbox still assigns and stores a local slug for reuse.
 
-On success, `warmup` prints a concise total duration line.
+On success, `warmup` prints a concise total duration line. Add `--timing-json` to emit a final JSON timing record with provider, lease ID, slug, total duration, and exit code.
 
 Flags:
 
@@ -26,6 +26,7 @@ Flags:
 --keep
 --actions-runner
 --reclaim
+--timing-json
 --blacksmith-org <org>
 --blacksmith-workflow <file|name|id>
 --blacksmith-job <job>

@@ -12,7 +12,7 @@ For `actions hydrate`, Crabbox inspects the selected workflow's `workflow_dispat
 
 Runner names and extra labels use the friendly slug when available, but workflow inputs and state-file paths keep using the canonical `cbx_...` ID.
 
-On success, `actions hydrate` prints a concise total duration line.
+On success, `actions hydrate` prints a concise total duration line. Add `--timing-json` to emit a final JSON timing record with provider, lease ID, slug, total duration, exit code, and the GitHub Actions run URL when the workflow marker reports a run ID.
 
 ```sh
 crabbox warmup --actions-runner
@@ -25,7 +25,7 @@ crabbox run --id blue-lobster -- pnpm test
 Subcommands:
 
 ```text
-hydrate --id <lease-id-or-slug> [--repo owner/name] [--workflow <file|name|id>] [--ref <ref>] [--wait-timeout 20m] [--keep-alive-minutes 90] [--reclaim] [-f key=value]
+hydrate --id <lease-id-or-slug> [--repo owner/name] [--workflow <file|name|id>] [--ref <ref>] [--wait-timeout 20m] [--keep-alive-minutes 90] [--reclaim] [--timing-json] [-f key=value]
 register --id <lease-id-or-slug> [--repo owner/name] [--name <runner-name>] [--labels <csv>] [--version latest] [--ephemeral=true] [--reclaim]
 dispatch [--repo owner/name] [--workflow <file|name|id>] [--ref <ref>] [-f key=value]
 ```
