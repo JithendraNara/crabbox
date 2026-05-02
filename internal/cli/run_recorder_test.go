@@ -164,6 +164,56 @@ func TestRunRecorderDefersCreateWhenCoordinatorRequiresLeaseID(t *testing.T) {
 	}
 }
 
+func TestRunRecorderSuppressesMissingEventEndpoint(t *testing.T) {
+	var stderr bytes.Buffer
+	var eventRequests int
+	var finishRequests int
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodPost && r.URL.Path == "/v1/runs":
+			_, _ = w.Write([]byte(`{"run":{"id":"run_123","leaseID":"","owner":"peter@example.com","org":"openclaw","provider":"aws","class":"standard","serverType":"t3.small","command":["pnpm","test"],"state":"running","phase":"starting","logBytes":0,"logTruncated":false,"startedAt":"2026-05-02T00:00:00Z"}}`))
+		case r.Method == http.MethodPost && r.URL.Path == "/v1/runs/run_123/events":
+			eventRequests++
+			http.Error(w, `{"error":"not_found"}`, http.StatusNotFound)
+		case r.Method == http.MethodPost && r.URL.Path == "/v1/runs/run_123/finish":
+			finishRequests++
+			_, _ = w.Write([]byte(`{"run":{"id":"run_123","leaseID":"","owner":"peter@example.com","org":"openclaw","provider":"aws","class":"standard","serverType":"t3.small","command":["pnpm","test"],"state":"succeeded","phase":"completed","exitCode":0,"logBytes":0,"logTruncated":false,"startedAt":"2026-05-02T00:00:00Z","finishedAt":"2026-05-02T00:00:01Z"}}`))
+		default:
+			t.Fatalf("unexpected request %s %s", r.Method, r.URL.Path)
+		}
+	}))
+	defer server.Close()
+
+	client := &CoordinatorClient{BaseURL: server.URL, Client: server.Client()}
+	rec := newRunRecorder(context.Background(), client, Config{
+		Provider:   "aws",
+		Class:      "standard",
+		ServerType: "t3.small",
+	}, []string{"pnpm", "test"}, &stderr)
+	rec.AttachLease("cbx_abcdef123456", "blue-lobster", Config{
+		Provider:   "aws",
+		Class:      "standard",
+		ServerType: "t3.small",
+	})
+	stdout := rec.StreamWriter("stdout")
+	if _, err := stdout.Write([]byte("hello")); err != nil {
+		t.Fatal(err)
+	}
+	stdout.Flush()
+	rec.waitForOutputEvents(time.Second)
+	rec.Finish(0, time.Second, time.Second, "ok", false, nil)
+
+	if eventRequests != 1 {
+		t.Fatalf("event requests=%d, want 1", eventRequests)
+	}
+	if finishRequests != 1 {
+		t.Fatalf("finish requests=%d, want 1", finishRequests)
+	}
+	if text := stderr.String(); strings.Contains(text, "warning:") || !strings.Contains(text, "recording run run_123") {
+		t.Fatalf("stderr=%q", text)
+	}
+}
+
 type blockingRoundTripper struct {
 	started chan struct{}
 }

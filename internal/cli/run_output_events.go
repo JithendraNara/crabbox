@@ -18,7 +18,7 @@ const (
 type runOutputEventQueue struct {
 	coord           *CoordinatorClient
 	runID           string
-	warn            func(string, ...any)
+	onError         func(string, error) bool
 	outputMu        sync.Mutex
 	outputBytes     int
 	outputTruncated bool
@@ -26,15 +26,16 @@ type runOutputEventQueue struct {
 	closeOnce       sync.Once
 	queueMu         sync.Mutex
 	queueClosed     bool
+	disabled        bool
 	events          chan CoordinatorRunEventInput
 	wg              sync.WaitGroup
 }
 
-func newRunOutputEventQueue(coord *CoordinatorClient, runID string, warn func(string, ...any)) *runOutputEventQueue {
+func newRunOutputEventQueue(coord *CoordinatorClient, runID string, onError func(string, error) bool) *runOutputEventQueue {
 	return &runOutputEventQueue{
-		coord: coord,
-		runID: runID,
-		warn:  warn,
+		coord:   coord,
+		runID:   runID,
+		onError: onError,
 	}
 }
 
@@ -49,6 +50,9 @@ func (q *runOutputEventQueue) Closed() bool {
 
 func (q *runOutputEventQueue) Enqueue(stream, data string) {
 	if q == nil || data == "" || q.coord == nil || q.runID == "" {
+		return
+	}
+	if q.Disabled() {
 		return
 	}
 	q.enqueue(q.eventInputs(stream, data))
@@ -104,7 +108,7 @@ func (q *runOutputEventQueue) enqueue(events []CoordinatorRunEventInput) {
 	})
 	q.queueMu.Lock()
 	defer q.queueMu.Unlock()
-	if q.queueClosed {
+	if q.queueClosed || q.disabled {
 		return
 	}
 	for _, event := range events {
@@ -122,10 +126,29 @@ func (q *runOutputEventQueue) post(events <-chan CoordinatorRunEventInput) {
 		ctx, cancel := context.WithTimeout(context.Background(), runEventOutputPostWait)
 		_, err := q.coord.AppendRunEvent(ctx, q.runID, event)
 		cancel()
-		if err != nil && q.warn != nil {
-			q.warn("run event append failed for %s: %v", event.Type, err)
+		if err != nil && q.onError != nil && !q.onError(event.Type, err) {
+			q.Disable()
+			return
 		}
 	}
+}
+
+func (q *runOutputEventQueue) Disable() {
+	if q == nil {
+		return
+	}
+	q.queueMu.Lock()
+	q.disabled = true
+	q.queueMu.Unlock()
+}
+
+func (q *runOutputEventQueue) Disabled() bool {
+	if q == nil {
+		return true
+	}
+	q.queueMu.Lock()
+	defer q.queueMu.Unlock()
+	return q.disabled
 }
 
 func (q *runOutputEventQueue) CloseAndWait(timeout time.Duration) {

@@ -15,6 +15,8 @@ type runRecorder struct {
 	runID           string
 	stderr          io.Writer
 	deferUntilLease bool
+	eventsMu        sync.Mutex
+	eventsDisabled  bool
 	finished        bool
 	warned          bool
 	warnMu          sync.Mutex
@@ -43,15 +45,22 @@ func (r *runRecorder) Event(kind, phase, message string) {
 	if r == nil || r.runID == "" || (r.finished && kind != "lease.released") {
 		return
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-	_, err := r.coord.AppendRunEvent(ctx, r.runID, CoordinatorRunEventInput{
+	r.appendEvent(kind, CoordinatorRunEventInput{
 		Type:    kind,
 		Phase:   phase,
 		Message: message,
 	})
+}
+
+func (r *runRecorder) appendEvent(kind string, input CoordinatorRunEventInput) {
+	if r == nil || r.coord == nil || r.runID == "" || !r.runEventsEnabled() {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	_, err := r.coord.AppendRunEvent(ctx, r.runID, input)
 	if err != nil {
-		r.warn("run event append failed for %s: %v", kind, err)
+		r.handleRunEventAppendError(kind, err)
 	}
 }
 
@@ -72,9 +81,7 @@ func (r *runRecorder) AttachLease(leaseID, slug string, cfg Config) {
 	if r.runID == "" {
 		return
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-	_, err := r.coord.AppendRunEvent(ctx, r.runID, CoordinatorRunEventInput{
+	r.appendEvent("lease.created", CoordinatorRunEventInput{
 		Type:       "lease.created",
 		Phase:      "leased",
 		LeaseID:    leaseID,
@@ -83,20 +90,17 @@ func (r *runRecorder) AttachLease(leaseID, slug string, cfg Config) {
 		Class:      cfg.Class,
 		ServerType: cfg.ServerType,
 	})
-	if err != nil {
-		r.warn("run event append failed for lease.created: %v", err)
-	}
 }
 
 func (r *runRecorder) attachRun(run CoordinatorRun) {
 	r.runID = run.ID
-	r.output = newRunOutputEventQueue(r.coord, run.ID, r.warn)
+	r.output = newRunOutputEventQueue(r.coord, run.ID, r.handleRunEventAppendError)
 	fmt.Fprintf(r.stderr, "recording run %s\n", run.ID)
 }
 
 func (r *runRecorder) StreamWriter(stream string) *runEventStreamWriter {
 	if r != nil && r.output == nil && r.coord != nil && r.runID != "" {
-		r.output = newRunOutputEventQueue(r.coord, r.runID, r.warn)
+		r.output = newRunOutputEventQueue(r.coord, r.runID, r.handleRunEventAppendError)
 	}
 	return &runEventStreamWriter{recorder: r, stream: stream}
 }
@@ -120,16 +124,11 @@ func (r *runRecorder) Failed(err error) {
 	}
 	r.waitForOutputEvents(runEventOutputPostWait)
 	r.finished = true
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-	_, appendErr := r.coord.AppendRunEvent(ctx, r.runID, CoordinatorRunEventInput{
+	r.appendEvent("run.failed", CoordinatorRunEventInput{
 		Type:    "run.failed",
 		Phase:   "failed",
 		Message: err.Error(),
 	})
-	if appendErr != nil {
-		r.warn("run event append failed for run.failed: %v", appendErr)
-	}
 }
 
 func (r *runRecorder) warn(format string, args ...any) {
@@ -150,6 +149,30 @@ func (r *runRecorder) waitForOutputEvents(timeout time.Duration) {
 		return
 	}
 	r.output.CloseAndWait(timeout)
+}
+
+func (r *runRecorder) runEventsEnabled() bool {
+	r.eventsMu.Lock()
+	defer r.eventsMu.Unlock()
+	return !r.eventsDisabled
+}
+
+func (r *runRecorder) disableRunEvents() {
+	r.eventsMu.Lock()
+	r.eventsDisabled = true
+	r.eventsMu.Unlock()
+	if r.output != nil {
+		r.output.Disable()
+	}
+}
+
+func (r *runRecorder) handleRunEventAppendError(kind string, err error) bool {
+	if isCoordinatorNotFoundError(err) {
+		r.disableRunEvents()
+		return false
+	}
+	r.warn("run event append failed for %s: %v", kind, err)
+	return true
 }
 
 func isInvalidLeaseIDCoordinatorError(err error) bool {
