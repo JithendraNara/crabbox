@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.3.1 - Unreleased
+
+### Added
+
+### Changed
+
+### Fixed
+
 ## 0.3.0 - 2026-05-02
 
 Crabbox 0.3.0 makes brokered runs much easier to observe and debug, adds
