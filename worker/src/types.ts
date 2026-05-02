@@ -163,6 +163,7 @@ export interface RunFinishRequest {
   syncMs?: number;
   commandMs?: number;
   log?: string;
+  logChunks?: string[];
   logTruncated?: boolean;
   results?: TestResultSummary;
 }

@@ -65,3 +65,28 @@ func TestRunLogBufferConcurrentWrites(t *testing.T) {
 		t.Fatalf("log missing expected output: %q", log)
 	}
 }
+
+func TestSplitRunLogChunks(t *testing.T) {
+	log := strings.Repeat("a", coordinatorRunLogChunkBytes) + "tail"
+	chunks := splitRunLogChunks(log)
+	if len(chunks) != 2 {
+		t.Fatalf("chunks=%d, want 2", len(chunks))
+	}
+	if len(chunks[0]) != coordinatorRunLogChunkBytes {
+		t.Fatalf("first chunk length=%d, want %d", len(chunks[0]), coordinatorRunLogChunkBytes)
+	}
+	if got := strings.Join(chunks, ""); got != log {
+		t.Fatalf("joined chunks length=%d, want %d", len(got), len(log))
+	}
+}
+
+func TestRunLogFallbackPreviewKeepsTail(t *testing.T) {
+	log := strings.Repeat("a", runLogFallbackPreviewBytes) + "tail"
+	preview := runLogFallbackPreview(log, true)
+	if len(preview) != runLogFallbackPreviewBytes {
+		t.Fatalf("preview length=%d, want %d", len(preview), runLogFallbackPreviewBytes)
+	}
+	if !strings.HasSuffix(preview, "tail") {
+		t.Fatalf("preview does not keep tail: suffix=%q", preview[len(preview)-8:])
+	}
+}

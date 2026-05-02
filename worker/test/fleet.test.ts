@@ -549,6 +549,50 @@ describe("fleet run history", () => {
     expect(await logs.text()).toBe("ok\n");
   });
 
+  it("records chunked run logs so failures do not disappear from long output", async () => {
+    const storage = new MemoryStorage();
+    const fleet = testFleet(storage);
+    const create = await fleet.fetch(
+      request("POST", "/v1/runs", {
+        body: {
+          leaseID: "cbx_000000000001",
+          provider: "aws",
+          class: "beast",
+          serverType: "c7a.48xlarge",
+          command: ["pnpm", "test"],
+        },
+      }),
+    );
+    expect(create.status).toBe(201);
+    const { run } = (await create.json()) as { run: { id: string } };
+    const chunkA = `${"a".repeat(70_000)}\nFAIL src/example.test.ts\n`;
+    const chunkB = `${"b".repeat(70_000)}\nELIFECYCLE Test failed\n`;
+
+    const finish = await fleet.fetch(
+      request("POST", `/v1/runs/${run.id}/finish`, {
+        body: {
+          exitCode: 1,
+          log: "fallback tail only\n",
+          logChunks: [chunkA, chunkB],
+        },
+      }),
+    );
+    expect(finish.status).toBe(200);
+    const finished = (await finish.json()) as {
+      run: { state: string; logBytes: number; logTruncated: boolean };
+    };
+    expect(finished.run.state).toBe("failed");
+    expect(finished.run.logBytes).toBe(chunkA.length + chunkB.length);
+    expect(finished.run.logTruncated).toBe(false);
+    expect(storage.value<string>(`runlog:${run.id}`)).toBe("");
+
+    const logs = await fleet.fetch(request("GET", `/v1/runs/${run.id}/logs`));
+    const logText = await logs.text();
+    expect(logText).toContain("FAIL src/example.test.ts");
+    expect(logText).toContain("ELIFECYCLE Test failed");
+    expect(logText).not.toContain("fallback tail only");
+  });
+
   it("records resolved lease metadata instead of caller-supplied fallback guesses", async () => {
     const storage = new MemoryStorage();
     const fleet = testFleet(storage);

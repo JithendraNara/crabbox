@@ -89,7 +89,7 @@ func outputTruncatedEventInput() CoordinatorRunEventInput {
 	return CoordinatorRunEventInput{
 		Type:    "output.truncated",
 		Phase:   "command",
-		Message: fmt.Sprintf("stdout/stderr event capture capped at %d bytes; use crabbox logs for the retained output tail", runEventOutputMaxBytes),
+		Message: fmt.Sprintf("stdout/stderr event capture capped at %d bytes; use crabbox logs for retained command output", runEventOutputMaxBytes),
 	}
 }
 

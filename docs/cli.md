@@ -189,7 +189,7 @@ Behavior:
 6. Sync current repo, unless a matching sync fingerprint lets Crabbox skip rsync.
 7. Seed remote Git from the configured origin/base ref before first sync when possible.
 8. Run command over SSH.
-9. Stream remote output, append run events, and retain the latest log tail in coordinator history.
+9. Stream remote output, append run events, and retain bounded command output in coordinator history.
 10. Heartbeat coordinator leases in the background.
 11. Release lease unless `--keep` is set.
 12. Exit with the remote command exit code.

@@ -25,6 +25,10 @@ import type {
 import { costLimits, enforceCostLimits, leaseCost, requestOrg, usageSummary } from "./usage";
 
 const fleetID = "default";
+const maxStoredRunLogBytes = 8 * 1024 * 1024;
+const runLogChunkBytes = 64 * 1024;
+const textEncoder = new TextEncoder();
+const textDecoder = new TextDecoder();
 
 export class FleetDurableObject implements DurableObject {
   constructor(
@@ -400,7 +404,7 @@ export class FleetDurableObject implements DurableObject {
       if (!run || !this.runVisibleToRequest(run, request)) {
         return notFound();
       }
-      const log = (await this.state.storage.get<string>(runLogKey(runID))) ?? "";
+      const log = await this.readRunLog(runID);
       return new Response(log, {
         headers: { "content-type": "text/plain; charset=utf-8" },
       });
@@ -453,13 +457,13 @@ export class FleetDurableObject implements DurableObject {
     run.state = run.exitCode === 0 ? "succeeded" : "failed";
     run.phase = run.state;
     run.endedAt = now.toISOString();
-    const log = input.log ?? "";
-    run.logBytes = new TextEncoder().encode(log).byteLength;
-    run.logTruncated = Boolean(input.logTruncated);
+    const logInput = normalizeRunLogInput(input);
+    run.logBytes = logInput.bytes;
+    run.logTruncated = logInput.truncated;
     if (input.results) {
       run.results = boundedTestResults(input.results);
     }
-    await this.state.storage.put(runLogKey(runID), log);
+    await this.writeRunLog(runID, logInput.log);
     await this.putRun(run);
     await this.appendRunEventRecord(run, {
       type: "command.finished",
@@ -467,6 +471,35 @@ export class FleetDurableObject implements DurableObject {
       exitCode: run.exitCode,
     });
     return json({ run });
+  }
+
+  private async readRunLog(runID: string): Promise<string> {
+    const chunks = await this.state.storage.list<string>({ prefix: runLogChunkPrefix(runID) });
+    if (chunks.size > 0) {
+      return [...chunks.entries()]
+        .toSorted(([left], [right]) => left.localeCompare(right))
+        .map(([, chunk]) => chunk)
+        .join("");
+    }
+    return (await this.state.storage.get<string>(runLogKey(runID))) ?? "";
+  }
+
+  private async writeRunLog(runID: string, log: string): Promise<void> {
+    await this.deleteRunLogChunks(runID);
+    if (textEncoder.encode(log).byteLength <= runLogChunkBytes) {
+      await this.state.storage.put(runLogKey(runID), log);
+      return;
+    }
+    await this.state.storage.put(runLogKey(runID), "");
+    const chunks = splitRunLogByBytes(log, runLogChunkBytes);
+    await Promise.all(
+      chunks.map((chunk, index) => this.state.storage.put(runLogChunkKey(runID, index), chunk)),
+    );
+  }
+
+  private async deleteRunLogChunks(runID: string): Promise<void> {
+    const chunks = await this.state.storage.list<string>({ prefix: runLogChunkPrefix(runID) });
+    await Promise.all([...chunks.keys()].map((key) => this.state.storage.delete(key)));
   }
 
   private async listRuns(request: Request): Promise<Response> {
@@ -746,6 +779,14 @@ function runLogKey(runID: string): string {
   return `runlog:${runID}`;
 }
 
+function runLogChunkPrefix(runID: string): string {
+  return `runlog:${runID}:chunk:`;
+}
+
+function runLogChunkKey(runID: string, index: number): string {
+  return `${runLogChunkPrefix(runID)}${String(index).padStart(6, "0")}`;
+}
+
 function runEventPrefix(runID: string): string {
   return `runevent:${runID}:`;
 }
@@ -814,6 +855,52 @@ function finiteNumber(value: number | undefined): number | undefined {
 function finiteQueryNumber(value: string | null): number | undefined {
   const parsed = Number(value ?? "");
   return Number.isFinite(parsed) && parsed >= 0 ? Math.trunc(parsed) : undefined;
+}
+
+function normalizeRunLogInput(input: RunFinishRequest): {
+  log: string;
+  bytes: number;
+  truncated: boolean;
+} {
+  const chunkLog = Array.isArray(input.logChunks)
+    ? input.logChunks.map((chunk) => String(chunk)).join("")
+    : "";
+  const rawLog = chunkLog || input.log || "";
+  const bounded = truncateUtf8Tail(rawLog, maxStoredRunLogBytes);
+  const rawBytes = textEncoder.encode(rawLog).byteLength;
+  return {
+    log: bounded,
+    bytes: Math.min(rawBytes, maxStoredRunLogBytes),
+    truncated: Boolean(input.logTruncated) || rawBytes > maxStoredRunLogBytes,
+  };
+}
+
+function splitRunLogByBytes(log: string, maxBytes: number): string[] {
+  const chunks: string[] = [];
+  let current = "";
+  let currentBytes = 0;
+  for (const char of log) {
+    const charBytes = textEncoder.encode(char).byteLength;
+    if (current && currentBytes + charBytes > maxBytes) {
+      chunks.push(current);
+      current = "";
+      currentBytes = 0;
+    }
+    current += char;
+    currentBytes += charBytes;
+  }
+  if (current) {
+    chunks.push(current);
+  }
+  return chunks;
+}
+
+function truncateUtf8Tail(value: string, maxBytes: number): string {
+  const encoded = textEncoder.encode(value);
+  if (encoded.byteLength <= maxBytes) {
+    return value;
+  }
+  return textDecoder.decode(encoded.slice(encoded.byteLength - maxBytes));
 }
 
 const MAX_RESULT_FILES = 50;

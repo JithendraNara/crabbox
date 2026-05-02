@@ -31,9 +31,9 @@ Before the first rsync into a Git checkout, Crabbox tries to seed the remote wor
 
 After sync, Crabbox runs a remote sanity check. If the remote checkout reports at least 200 tracked deletions, Crabbox fails before running tests unless local `CRABBOX_ALLOW_MASS_DELETIONS=1` is set.
 
-When a coordinator is configured, Crabbox records each remote command as a run history item. `crabbox history` lists those records and `crabbox logs <run-id>` prints the retained remote output tail. Log retention is intentionally bounded so a noisy command cannot fill Durable Object storage.
+When a coordinator is configured, Crabbox records each remote command as a run history item. `crabbox history` lists those records and `crabbox logs <run-id>` prints retained remote output. Log retention is intentionally bounded so a noisy command cannot fill Durable Object storage.
 
-Add `--junit <path>` or configure `results.junit` to attach JUnit XML summaries to the run record. `crabbox results <run-id>` then prints failed tests without reading the raw log tail.
+Add `--junit <path>` or configure `results.junit` to attach JUnit XML summaries to the run record. `crabbox results <run-id>` then prints failed tests without reading the raw log.
 
 Use `crabbox sync-plan` to inspect the same local manifest without leasing a box when a sync estimate looks unexpectedly large.
 

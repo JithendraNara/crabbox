@@ -26,5 +26,4 @@ inspectable through [history](history.md), [events](events.md), and
 [logs](logs.md).
 
 Output events are a bounded preview. Use [logs](logs.md) for the retained
-command output tail after completion.
-
+command output after completion.

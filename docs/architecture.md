@@ -81,7 +81,7 @@ Core stored records:
 ```sql
 leases(id, slug, provider, cloud_id, region, owner, org, profile, class, server_type, server_id, server_name, provider_key, host, ssh_user, ssh_port, work_root, keep, ttl_seconds, idle_timeout_seconds, estimated_hourly_usd, max_estimated_usd, state, created_at, updated_at, last_touched_at, expires_at, released_at, ended_at)
 runs(id, lease_id, slug, owner, org, provider, class, server_type, command_json, state, exit_code, sync_ms, command_ms, duration_ms, log_bytes, log_truncated, results_json, started_at, ended_at)
-runlog(run_id, bounded_stdout_stderr_tail)
+runlog(run_id, bounded_stdout_stderr_capture)
 ```
 
 State transitions:

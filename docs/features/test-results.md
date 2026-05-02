@@ -6,7 +6,7 @@ Read when:
 - changing how failed tests are summarized;
 - debugging why `crabbox results` has no data.
 
-Crabbox can attach JUnit XML summaries to coordinator run history. The agent uses this so a failed run can answer "which tests failed?" without scraping a large log tail.
+Crabbox can attach JUnit XML summaries to coordinator run history. The agent uses this so a failed run can answer "which tests failed?" without scraping a large raw log.
 
 Configure per run:
 

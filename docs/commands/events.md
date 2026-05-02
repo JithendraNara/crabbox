@@ -17,7 +17,7 @@ Human output includes sequence number, event type, phase, stream, timestamp, and
 short message or output text. JSON output returns the raw event records.
 Output events are a bounded preview: stdout/stderr capture stops after 64 KiB
 per run and records an `output.truncated` marker. Use `crabbox logs` for the
-retained command output tail.
+larger retained command output.
 
 Flags:
 

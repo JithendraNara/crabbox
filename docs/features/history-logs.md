@@ -19,7 +19,7 @@ CLI finishes that run with:
 - total duration;
 - owner and org;
 - provider, class, and server type;
-- retained remote output tail.
+- retained remote output.
 
 Use:
 
@@ -32,10 +32,11 @@ crabbox logs run_...
 ```
 
 History records and run events live in the Fleet Durable Object. Log text is
-stored separately from run metadata and intentionally capped to the latest tail
-so noisy commands cannot exhaust storage. Event output capture is also bounded;
-use `crabbox attach` for active run previews and `crabbox logs` for the retained
-command output tail.
+stored separately from run metadata and intentionally capped so noisy commands
+cannot exhaust storage. Logs larger than one storage value are chunked by the
+coordinator and reassembled by `crabbox logs`. Event output capture is also
+bounded; use `crabbox attach` for active run previews and `crabbox logs` for the
+retained command output.
 
 Direct-provider mode does not have central history. Use shell output or local terminal logs there.
 

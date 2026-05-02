@@ -116,6 +116,41 @@ func TestCoordinatorRunEvents(t *testing.T) {
 	}
 }
 
+func TestCoordinatorFinishRunSendsLogChunks(t *testing.T) {
+	var finishBody map[string]any
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost || r.URL.Path != "/v1/runs/run_123/finish" {
+			t.Fatalf("unexpected request %s %s", r.Method, r.URL.Path)
+		}
+		if err := json.NewDecoder(r.Body).Decode(&finishBody); err != nil {
+			t.Fatal(err)
+		}
+		_, _ = w.Write([]byte(`{"run":{"id":"run_123","leaseID":"","owner":"peter@example.com","org":"openclaw","provider":"aws","class":"standard","serverType":"t3.small","command":["pnpm","test"],"state":"failed","phase":"failed","exitCode":1,"logBytes":0,"logTruncated":false,"startedAt":"2026-05-02T00:00:00Z"}}`))
+	}))
+	defer server.Close()
+	client := CoordinatorClient{BaseURL: server.URL, Client: server.Client()}
+	log := strings.Repeat("x", coordinatorRunLogChunkBytes) + "tail"
+	if _, err := client.FinishRun(context.Background(), "run_123", 1, time.Second, 2*time.Second, log, false, nil); err != nil {
+		t.Fatal(err)
+	}
+	chunks, ok := finishBody["logChunks"].([]any)
+	if !ok {
+		t.Fatalf("logChunks body=%#v", finishBody["logChunks"])
+	}
+	if len(chunks) != 2 {
+		t.Fatalf("logChunks=%d, want 2", len(chunks))
+	}
+	if got := chunks[0].(string); len(got) != coordinatorRunLogChunkBytes {
+		t.Fatalf("first chunk length=%d, want %d", len(got), coordinatorRunLogChunkBytes)
+	}
+	if got := chunks[1].(string); got != "tail" {
+		t.Fatalf("second chunk=%q, want tail", got)
+	}
+	if got := finishBody["log"].(string); len(got) != runLogFallbackPreviewBytes || !strings.HasSuffix(got, "tail") {
+		t.Fatalf("fallback log length=%d suffix=%q", len(got), got[len(got)-4:])
+	}
+}
+
 func TestCurlConfigKeepsBearerTokenInConfig(t *testing.T) {
 	client := CoordinatorClient{
 		BaseURL: "https://example.test",

@@ -509,11 +509,13 @@ func (c *CoordinatorClient) CreateRun(ctx context.Context, leaseID string, cfg C
 
 func (c *CoordinatorClient) FinishRun(ctx context.Context, runID string, exitCode int, sync, command time.Duration, log string, truncated bool, results *TestResultSummary) (CoordinatorRun, error) {
 	var res CoordinatorRunResponse
+	logChunks := splitRunLogChunks(log)
 	err := c.do(ctx, http.MethodPost, "/v1/runs/"+url.PathEscape(runID)+"/finish", map[string]any{
 		"exitCode":     exitCode,
 		"syncMs":       sync.Milliseconds(),
 		"commandMs":    command.Milliseconds(),
-		"log":          log,
+		"log":          runLogFallbackPreview(log, truncated),
+		"logChunks":    logChunks,
 		"logTruncated": truncated,
 		"results":      results,
 	}, &res)

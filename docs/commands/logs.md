@@ -1,6 +1,6 @@
 # logs
 
-`crabbox logs` prints the retained remote output tail for a recorded run.
+`crabbox logs` prints the retained remote output for a recorded run.
 
 ```sh
 crabbox logs run_...
@@ -10,7 +10,7 @@ crabbox logs run_... --json
 
 The plain form writes the log text to stdout. `--json` returns run metadata plus the log.
 
-Logs are bounded tails of remote stdout/stderr. They are for debugging recent runs, not unlimited archival.
+Logs are bounded remote stdout/stderr captures. The CLI keeps up to 8 MiB per run and the coordinator stores larger captures in chunks, so failures from noisy parallel runs remain visible without turning run history into unlimited archival storage.
 
 Related docs:
 

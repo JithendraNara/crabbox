@@ -7,7 +7,7 @@ Read when:
 - finding a remote machine for SSH inspection;
 - correlating Actions hydration with the remote workspace.
 
-Crabbox exposes operational visibility through CLI commands, coordinator usage summaries, retained run history/log tails, provider labels, GitHub Actions run links, and Worker logs. The reliable path is to keep the lease ID and run ID together.
+Crabbox exposes operational visibility through CLI commands, coordinator usage summaries, retained run history/logs, provider labels, GitHub Actions run links, and Worker logs. The reliable path is to keep the lease ID and run ID together.
 
 ## Lease State
 
@@ -49,7 +49,7 @@ Reports include lease count, active lease count, elapsed runtime, estimated elap
 
 Coordinator-backed `crabbox run` creates a durable run record before leasing
 starts, appends lifecycle events while the CLI progresses, and finishes the run
-with exit code, timing, and the latest retained output tail.
+with exit code, timing, and retained command output.
 
 Use:
 
@@ -65,8 +65,8 @@ bin/crabbox results run_...
 
 History is for command debugging, not unlimited log archival. Events are ordered
 phase and output chunks for reconnect/inspection, and `attach` can follow those
-events while the original CLI is still alive. Logs are bounded tails of remote
-stdout/stderr. Test results are stored as structured summaries when `--junit`
+events while the original CLI is still alive. Logs are bounded retained remote
+stdout/stderr captures. Test results are stored as structured summaries when `--junit`
 or `results.junit` is configured.
 
 ## Remote Debugging
