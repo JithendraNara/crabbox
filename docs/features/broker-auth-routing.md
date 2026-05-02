@@ -20,6 +20,11 @@ Normal users run `crabbox login`, which opens GitHub and stores a signed Crabbox
 https://crabbox.openclaw.ai/v1/auth/github/callback
 ```
 
+Self-hosted coordinators need their own GitHub OAuth app. The callback URL on
+that app must exactly match the public Worker URL plus
+`/v1/auth/github/callback`, and the Worker `CRABBOX_PUBLIC_URL` must use that
+same public origin.
+
 Worker secrets:
 
 ```text

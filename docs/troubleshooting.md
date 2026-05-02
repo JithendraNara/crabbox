@@ -24,6 +24,7 @@ Symptoms:
 - `401`;
 - `403`;
 - `missing broker token`;
+- GitHub `Invalid redirect_uri`;
 - Cloudflare Access page instead of JSON.
 
 Checks:
@@ -32,6 +33,7 @@ Checks:
 bin/crabbox config show
 printenv CRABBOX_COORDINATOR
 printenv CRABBOX_COORDINATOR_TOKEN
+printenv CRABBOX_PUBLIC_URL
 ```
 
 Fixes:
@@ -39,6 +41,8 @@ Fixes:
 - configure the broker with `crabbox config set-broker`;
 - ensure the CLI points at the Worker URL or the Access-protected route intentionally;
 - ensure `CRABBOX_COORDINATOR_TOKEN` matches the Worker `CRABBOX_SHARED_TOKEN`.
+- for self-hosted GitHub browser login, create your own GitHub OAuth app and set its callback URL to `https://<your-coordinator-host>/v1/auth/github/callback`;
+- ensure the Worker's `CRABBOX_PUBLIC_URL` uses the same public origin as that GitHub OAuth callback.
 
 ## Lease Rejected By Cost Control
 
