@@ -12,6 +12,7 @@ export interface Env {
   CRABBOX_AWS_ROOT_GB?: string;
   CRABBOX_AWS_SSH_CIDRS?: string;
   CRABBOX_SHARED_TOKEN?: string;
+  CRABBOX_ADMIN_TOKEN?: string;
   CRABBOX_SESSION_SECRET?: string;
   CRABBOX_GITHUB_CLIENT_ID?: string;
   CRABBOX_GITHUB_CLIENT_SECRET?: string;
@@ -21,6 +22,8 @@ export interface Env {
   CRABBOX_GITHUB_ALLOWED_TEAMS?: string;
   CRABBOX_PUBLIC_URL?: string;
   CRABBOX_DEFAULT_ORG?: string;
+  CRABBOX_ACCESS_TEAM_DOMAIN?: string;
+  CRABBOX_ACCESS_AUD?: string;
   CRABBOX_COST_RATES_JSON?: string;
   CRABBOX_EUR_TO_USD?: string;
   CRABBOX_MAX_ACTIVE_LEASES?: string;

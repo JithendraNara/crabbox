@@ -41,16 +41,9 @@ func (a App) imageCreate(ctx context.Context, args []string) error {
 	if *id == "" || *name == "" {
 		return exit(2, "usage: crabbox image create --id <cbx_id> --name <ami-name> [--wait]")
 	}
-	cfg, err := loadConfig()
+	coord, err := configuredAdminCoordinator()
 	if err != nil {
 		return err
-	}
-	coord, ok, err := newCoordinatorClient(cfg)
-	if err != nil {
-		return err
-	}
-	if !ok {
-		return exit(2, "image create requires a coordinator")
 	}
 	image, err := coord.CreateImage(ctx, *id, *name, *noReboot)
 	if err != nil {
@@ -78,16 +71,9 @@ func (a App) imagePromote(ctx context.Context, args []string) error {
 	if fs.NArg() != 1 {
 		return exit(2, "usage: crabbox image promote <ami-id>")
 	}
-	cfg, err := loadConfig()
+	coord, err := configuredAdminCoordinator()
 	if err != nil {
 		return err
-	}
-	coord, ok, err := newCoordinatorClient(cfg)
-	if err != nil {
-		return err
-	}
-	if !ok {
-		return exit(2, "image promote requires a coordinator")
 	}
 	image, err := coord.PromoteImage(ctx, fs.Arg(0))
 	if err != nil {

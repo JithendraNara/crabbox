@@ -6,7 +6,7 @@ Read when:
 - changing trusted operator controls;
 - debugging who owns a lease or run.
 
-Crabbox supports GitHub browser login for normal users and shared bearer-token login for trusted operator automation. `crabbox login` opens GitHub, the coordinator exchanges the OAuth code, verifies active membership in the allowed GitHub org and optional allowed team slugs, and the CLI stores a signed user token in the user config. `crabbox login --token-stdin` stores the shared operator token instead.
+Crabbox supports GitHub browser login for normal users, shared bearer-token login for trusted operator automation, and a separate admin token for fleet-wide routes. `crabbox login` opens GitHub, the coordinator exchanges the OAuth code, verifies active membership in the allowed GitHub org and optional allowed team slugs, and the CLI stores a signed user token in the user config. `crabbox login --token-stdin` stores the shared operator token instead.
 
 Identity sent to the coordinator:
 
@@ -14,7 +14,7 @@ Identity sent to the coordinator:
 signed GitHub login token from browser auth
 X-Crabbox-Owner from CRABBOX_OWNER, Git email env, or git config user.email
 X-Crabbox-Org from CRABBOX_ORG
-Cloudflare Access email, when forwarded by a protected fallback route
+Verified Cloudflare Access JWT email, when configured and present
 CRABBOX_DEFAULT_ORG fallback in the Worker
 ```
 
@@ -36,7 +36,7 @@ crabbox admin release blue-lobster
 crabbox admin delete cbx_... --force
 ```
 
-Admin commands require the shared operator token. GitHub browser-login tokens can create and use normal leases only after allowed-org membership, and configured team membership when present, is verified. They cannot call admin routes.
+Admin commands require the separate admin token. GitHub browser-login tokens can create and use normal leases only after allowed-org membership, and configured team membership when present, is verified. They cannot call admin routes.
 
 Normal user tokens are owner/org scoped:
 
@@ -47,10 +47,10 @@ POST /v1/leases/{id}/heartbeat own leases only
 POST /v1/leases/{id}/release   own leases only
 GET /v1/runs and logs          own runs only
 GET /v1/usage                  own usage only
-GET /v1/pool                   shared-token admin only
+GET /v1/pool                   admin token only
 ```
 
-Do not distribute the shared token to untrusted users.
+Do not distribute the shared token or admin token to untrusted users. Keep the admin token narrower and more closely held than the shared automation token.
 
 Related docs:
 

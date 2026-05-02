@@ -38,7 +38,7 @@ Identity for usage:
 - shared bearer-token CLI requests send `X-Crabbox-Owner`;
 - `X-Crabbox-Owner` comes from `CRABBOX_OWNER`, Git email env, or `git config user.email`;
 - `CRABBOX_ORG` sends `X-Crabbox-Org`.
-- Access-protected fallback routes can override shared-token owner headers with the forwarded Cloudflare Access email.
+- raw Cloudflare Access identity headers are ignored; only a verified Access JWT email can become the bearer-token owner.
 
 `estimatedUSD` is elapsed runtime cost. `reservedUSD` is TTL worst-case cost reserved before provisioning. Provider extras such as static IP charges, egress, snapshots, taxes, credits, and discounts are not fully modeled.
 

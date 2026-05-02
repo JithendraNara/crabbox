@@ -12,7 +12,9 @@ crabbox admin delete cbx_... --force
 
 Release/delete accept a canonical `cbx_...` ID or an active slug; use the canonical ID when an admin slug lookup is ambiguous.
 
-Admin commands require a configured coordinator and bearer token. The current coordinator trusts the shared operator token; do not expose it to untrusted users.
+Admin commands require a configured coordinator and a separate admin bearer token
+stored as `broker.adminToken` or `CRABBOX_COORDINATOR_ADMIN_TOKEN`. The shared
+operator token is not enough for admin routes.
 
 ## leases
 

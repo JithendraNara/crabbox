@@ -3,6 +3,8 @@ import type { Env } from "./types";
 
 const tokenPrefix = "cbxu_";
 const encoder = new TextEncoder();
+const decoder = new TextDecoder();
+const accessKeyCache = new Map<string, CryptoKey>();
 
 export interface AuthContext {
   authorized: boolean;
@@ -26,21 +28,36 @@ interface UserTokenPayload {
 
 export async function authenticateRequest(
   request: Request,
-  env: Pick<Env, "CRABBOX_SHARED_TOKEN" | "CRABBOX_SESSION_SECRET" | "CRABBOX_DEFAULT_ORG">,
+  env: Pick<
+    Env,
+    | "CRABBOX_SHARED_TOKEN"
+    | "CRABBOX_ADMIN_TOKEN"
+    | "CRABBOX_SESSION_SECRET"
+    | "CRABBOX_DEFAULT_ORG"
+    | "CRABBOX_ACCESS_TEAM_DOMAIN"
+    | "CRABBOX_ACCESS_AUD"
+  >,
 ): Promise<AuthContext | undefined> {
   const token = bearerToken(request);
   if (!token) {
     return undefined;
   }
-  if (env.CRABBOX_SHARED_TOKEN && token === env.CRABBOX_SHARED_TOKEN) {
+  const accessIdentity = await verifiedAccessIdentity(request, env).catch(() => undefined);
+  if (env.CRABBOX_ADMIN_TOKEN && token === env.CRABBOX_ADMIN_TOKEN) {
     return {
       authorized: true,
       admin: true,
       auth: "bearer",
-      owner:
-        request.headers.get("cf-access-authenticated-user-email") ??
-        request.headers.get("x-crabbox-owner") ??
-        "unknown",
+      owner: accessIdentity?.email ?? request.headers.get("x-crabbox-owner") ?? "unknown",
+      org: request.headers.get("x-crabbox-org") ?? env.CRABBOX_DEFAULT_ORG ?? "unknown",
+    };
+  }
+  if (env.CRABBOX_SHARED_TOKEN && token === env.CRABBOX_SHARED_TOKEN) {
+    return {
+      authorized: true,
+      admin: false,
+      auth: "bearer",
+      owner: accessIdentity?.email ?? request.headers.get("x-crabbox-owner") ?? "unknown",
       org: request.headers.get("x-crabbox-org") ?? env.CRABBOX_DEFAULT_ORG ?? "unknown",
     };
   }
@@ -61,6 +78,7 @@ export async function authenticateRequest(
 export function requestWithAuthContext(request: Request, auth: AuthContext): Request {
   const headers = new Headers(request.headers);
   headers.delete("cf-access-authenticated-user-email");
+  headers.delete("cf-access-jwt-assertion");
   headers.set("x-crabbox-auth", auth.auth);
   headers.set("x-crabbox-admin", auth.admin ? "true" : "false");
   headers.set("x-crabbox-owner", auth.owner);
@@ -142,6 +160,129 @@ function sessionSecret(env: Pick<Env, "CRABBOX_SHARED_TOKEN" | "CRABBOX_SESSION_
     throw new Error("CRABBOX_SESSION_SECRET or CRABBOX_SHARED_TOKEN is required");
   }
   return secret;
+}
+
+interface AccessIdentity {
+  email?: string;
+  subject?: string;
+}
+
+interface AccessJwtPayload {
+  aud?: string | string[];
+  email?: string;
+  exp?: number;
+  iat?: number;
+  iss?: string;
+  nbf?: number;
+  sub?: string;
+}
+
+interface AccessJwtHeader {
+  alg?: string;
+  kid?: string;
+}
+
+interface AccessCerts {
+  keys?: AccessPublicJwk[];
+}
+
+interface AccessPublicJwk extends JsonWebKey {
+  kid?: string;
+}
+
+async function verifiedAccessIdentity(
+  request: Request,
+  env: Pick<Env, "CRABBOX_ACCESS_TEAM_DOMAIN" | "CRABBOX_ACCESS_AUD">,
+): Promise<AccessIdentity | undefined> {
+  const jwt = request.headers.get("cf-access-jwt-assertion");
+  const teamDomain = normalizedAccessTeamDomain(env.CRABBOX_ACCESS_TEAM_DOMAIN);
+  const expectedAud = env.CRABBOX_ACCESS_AUD?.trim();
+  if (!jwt || !teamDomain || !expectedAud) {
+    return undefined;
+  }
+  const [encodedHeader, encodedPayload, encodedSignature] = jwt.split(".");
+  if (!encodedHeader || !encodedPayload || !encodedSignature) {
+    return undefined;
+  }
+  const header = JSON.parse(decoder.decode(base64URLDecode(encodedHeader))) as AccessJwtHeader;
+  if (header.alg !== "RS256" || !header.kid) {
+    return undefined;
+  }
+  const key = await accessPublicKey(teamDomain, header.kid);
+  if (!key) {
+    return undefined;
+  }
+  const verified = await crypto.subtle.verify(
+    "RSASSA-PKCS1-v1_5",
+    key,
+    base64URLDecode(encodedSignature),
+    encoder.encode(`${encodedHeader}.${encodedPayload}`),
+  );
+  if (!verified) {
+    return undefined;
+  }
+  const payload = JSON.parse(decoder.decode(base64URLDecode(encodedPayload))) as AccessJwtPayload;
+  if (!validAccessPayload(payload, teamDomain, expectedAud)) {
+    return undefined;
+  }
+  const identity: AccessIdentity = {};
+  if (typeof payload.email === "string" && payload.email !== "") {
+    identity.email = payload.email;
+  }
+  if (typeof payload.sub === "string" && payload.sub !== "") {
+    identity.subject = payload.sub;
+  }
+  return identity;
+}
+
+async function accessPublicKey(teamDomain: string, kid: string): Promise<CryptoKey | undefined> {
+  const cacheKey = `${teamDomain}:${kid}`;
+  const cached = accessKeyCache.get(cacheKey);
+  if (cached) {
+    return cached;
+  }
+  const response = await fetch(`https://${teamDomain}/cdn-cgi/access/certs`);
+  if (!response.ok) {
+    return undefined;
+  }
+  const certs = (await response.json()) as AccessCerts;
+  const jwk = certs.keys?.find((key) => key.kid === kid);
+  if (!jwk) {
+    return undefined;
+  }
+  const key = await crypto.subtle.importKey(
+    "jwk",
+    jwk,
+    { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" },
+    false,
+    ["verify"],
+  );
+  accessKeyCache.set(cacheKey, key);
+  return key;
+}
+
+function normalizedAccessTeamDomain(value: string | undefined): string {
+  const trimmed = value?.trim() ?? "";
+  if (!trimmed) {
+    return "";
+  }
+  return trimmed.replace(/^https?:\/\//, "").replace(/\/.*$/, "");
+}
+
+function validAccessPayload(
+  payload: AccessJwtPayload,
+  teamDomain: string,
+  expectedAud: string,
+): boolean {
+  const now = Math.floor(Date.now() / 1000);
+  const audiences = Array.isArray(payload.aud) ? payload.aud : payload.aud ? [payload.aud] : [];
+  return (
+    audiences.includes(expectedAud) &&
+    payload.iss === `https://${teamDomain}` &&
+    typeof payload.exp === "number" &&
+    payload.exp > now &&
+    (typeof payload.nbf !== "number" || payload.nbf <= now)
+  );
 }
 
 async function sign(value: string, secret: string): Promise<string> {

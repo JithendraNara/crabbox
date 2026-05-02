@@ -2,6 +2,7 @@ package cli
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -18,6 +19,7 @@ type Config struct {
 	ServerType       string
 	Coordinator      string
 	CoordToken       string
+	CoordAdminToken  string
 	Access           AccessConfig
 	Location         string
 	Image            string
@@ -210,10 +212,11 @@ type fileConfig struct {
 }
 
 type fileBrokerConfig struct {
-	URL      string            `yaml:"url,omitempty"`
-	Token    string            `yaml:"token,omitempty"`
-	Provider string            `yaml:"provider,omitempty"`
-	Access   *fileAccessConfig `yaml:"access,omitempty"`
+	URL        string            `yaml:"url,omitempty"`
+	Token      string            `yaml:"token,omitempty"`
+	AdminToken string            `yaml:"adminToken,omitempty"`
+	Provider   string            `yaml:"provider,omitempty"`
+	Access     *fileAccessConfig `yaml:"access,omitempty"`
 }
 
 type fileAccessConfig struct {
@@ -367,7 +370,27 @@ func writeUserFileConfig(cfg fileConfig) (string, error) {
 	if err := os.WriteFile(path, data, 0o600); err != nil {
 		return "", exit(2, "write config %s: %v", path, err)
 	}
+	if err := os.Chmod(path, 0o600); err != nil {
+		return "", exit(2, "secure config %s: %v", path, err)
+	}
 	return path, nil
+}
+
+func configFilePermissionProblem(path string) string {
+	if path == "" {
+		return ""
+	}
+	info, err := os.Stat(path)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return ""
+		}
+		return err.Error()
+	}
+	if info.Mode().Perm()&0o077 != 0 {
+		return fmt.Sprintf("permissions %04o want 0600", info.Mode().Perm())
+	}
+	return ""
 }
 
 func writableConfigPath() string {
@@ -411,6 +434,9 @@ func applyFileConfig(cfg *Config, file fileConfig) {
 		}
 		if file.Broker.Token != "" {
 			cfg.CoordToken = file.Broker.Token
+		}
+		if file.Broker.AdminToken != "" {
+			cfg.CoordAdminToken = file.Broker.AdminToken
 		}
 		if file.Broker.Provider != "" {
 			cfg.Provider = file.Broker.Provider
@@ -625,6 +651,7 @@ func applyEnv(cfg *Config) {
 	cfg.ServerType = getenv("CRABBOX_SERVER_TYPE", cfg.ServerType)
 	cfg.Coordinator = getenv("CRABBOX_COORDINATOR", cfg.Coordinator)
 	cfg.CoordToken = getenv("CRABBOX_COORDINATOR_TOKEN", cfg.CoordToken)
+	cfg.CoordAdminToken = getenv("CRABBOX_COORDINATOR_ADMIN_TOKEN", getenv("CRABBOX_ADMIN_TOKEN", cfg.CoordAdminToken))
 	cfg.Access.ClientID = getenv("CRABBOX_ACCESS_CLIENT_ID", getenv("CF_ACCESS_CLIENT_ID", cfg.Access.ClientID))
 	cfg.Access.ClientSecret = getenv("CRABBOX_ACCESS_CLIENT_SECRET", getenv("CF_ACCESS_CLIENT_SECRET", cfg.Access.ClientSecret))
 	cfg.Access.Token = getenv("CRABBOX_ACCESS_TOKEN", getenv("CF_ACCESS_TOKEN", cfg.Access.Token))

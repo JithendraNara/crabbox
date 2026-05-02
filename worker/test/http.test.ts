@@ -1,7 +1,12 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { isAuthorized } from "../src";
-import { authenticateRequest, issueUserToken, requestWithAuthContext } from "../src/auth";
+import {
+  authenticateRequest,
+  base64URL,
+  issueUserToken,
+  requestWithAuthContext,
+} from "../src/auth";
 import { requestOwner } from "../src/http";
 
 describe("coordinator auth", () => {
@@ -17,6 +22,84 @@ describe("coordinator auth", () => {
     });
     await expect(isAuthorized(denied, { CRABBOX_SHARED_TOKEN: "secret" })).resolves.toBe(false);
     await expect(isAuthorized(allowed, { CRABBOX_SHARED_TOKEN: "secret" })).resolves.toBe(true);
+  });
+
+  it("keeps shared bearer token non-admin and requires a separate admin token", async () => {
+    const env = {
+      CRABBOX_SHARED_TOKEN: "shared",
+      CRABBOX_ADMIN_TOKEN: "admin",
+      CRABBOX_DEFAULT_ORG: "openclaw",
+    };
+    const shared = await authenticateRequest(
+      new Request("https://example.test/v1/pool", {
+        headers: {
+          authorization: "Bearer shared",
+          "x-crabbox-owner": "operator@example.com",
+          "cf-access-authenticated-user-email": "spoof@example.com",
+        },
+      }),
+      env,
+    );
+    const admin = await authenticateRequest(
+      new Request("https://example.test/v1/pool", {
+        headers: { authorization: "Bearer admin", "x-crabbox-owner": "operator@example.com" },
+      }),
+      env,
+    );
+
+    expect(shared).toMatchObject({
+      authorized: true,
+      admin: false,
+      owner: "operator@example.com",
+    });
+    expect(admin).toMatchObject({
+      authorized: true,
+      admin: true,
+      owner: "operator@example.com",
+    });
+  });
+
+  it("uses Cloudflare Access identity only after verifying the Access JWT", async () => {
+    const { jwt, publicJwk } = await accessJwt({
+      kid: "access-test-kid",
+      aud: "access-aud",
+      iss: "https://team.example.cloudflareaccess.com",
+      email: "verified@example.com",
+    });
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({ keys: [publicJwk] }), {
+        headers: { "content-type": "application/json" },
+      }),
+    );
+    try {
+      const auth = await authenticateRequest(
+        new Request("https://example.test/v1/whoami", {
+          headers: {
+            authorization: "Bearer shared",
+            "cf-access-authenticated-user-email": "spoof@example.com",
+            "cf-access-jwt-assertion": jwt,
+            "x-crabbox-owner": "operator@example.com",
+          },
+        }),
+        {
+          CRABBOX_SHARED_TOKEN: "shared",
+          CRABBOX_DEFAULT_ORG: "openclaw",
+          CRABBOX_ACCESS_TEAM_DOMAIN: "team.example.cloudflareaccess.com",
+          CRABBOX_ACCESS_AUD: "access-aud",
+        },
+      );
+
+      expect(auth).toMatchObject({
+        authorized: true,
+        admin: false,
+        owner: "verified@example.com",
+      });
+      expect(fetchMock).toHaveBeenCalledWith(
+        "https://team.example.cloudflareaccess.com/cdn-cgi/access/certs",
+      );
+    } finally {
+      fetchMock.mockRestore();
+    }
   });
 
   it("accepts signed GitHub user tokens without admin rights", async () => {
@@ -57,6 +140,53 @@ describe("coordinator auth", () => {
     });
 
     expect(next.headers.get("cf-access-authenticated-user-email")).toBeNull();
+    expect(next.headers.get("cf-access-jwt-assertion")).toBeNull();
     expect(requestOwner(next)).toBe("friend@example.com");
   });
 });
+
+async function accessJwt(input: {
+  kid: string;
+  aud: string;
+  iss: string;
+  email: string;
+}): Promise<{ jwt: string; publicJwk: JsonWebKey & { kid: string } }> {
+  const keyPair = (await crypto.subtle.generateKey(
+    {
+      name: "RSASSA-PKCS1-v1_5",
+      modulusLength: 2048,
+      publicExponent: new Uint8Array([1, 0, 1]),
+      hash: "SHA-256",
+    },
+    true,
+    ["sign", "verify"],
+  )) as CryptoKeyPair;
+  const publicJwk = (await crypto.subtle.exportKey("jwk", keyPair.publicKey)) as JsonWebKey & {
+    kid: string;
+  };
+  publicJwk.kid = input.kid;
+  publicJwk.alg = "RS256";
+  publicJwk.use = "sig";
+  const now = Math.floor(Date.now() / 1000);
+  const header = base64URL(
+    new TextEncoder().encode(JSON.stringify({ alg: "RS256", kid: input.kid, typ: "JWT" })),
+  );
+  const payload = base64URL(
+    new TextEncoder().encode(
+      JSON.stringify({
+        aud: input.aud,
+        email: input.email,
+        exp: now + 300,
+        iat: now,
+        iss: input.iss,
+        sub: "access-subject",
+      }),
+    ),
+  );
+  const signature = await crypto.subtle.sign(
+    "RSASSA-PKCS1-v1_5",
+    keyPair.privateKey,
+    new TextEncoder().encode(`${header}.${payload}`),
+  );
+  return { jwt: `${header}.${payload}.${base64URL(new Uint8Array(signature))}`, publicJwk };
+}

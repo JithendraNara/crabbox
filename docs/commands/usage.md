@@ -13,9 +13,9 @@ crabbox usage --scope all --json
 
 Usage requires a configured coordinator. Direct-provider mode has no central history to query.
 
-Lease ownership comes from the signed GitHub login token for normal users. In shared bearer-token mode, the CLI sends `CRABBOX_OWNER`, Git email env, or local `git config user.email`; set `CRABBOX_ORG` to group leases under an org. Access-protected fallback routes can override shared-token owner headers when they forward a Cloudflare Access email.
+Lease ownership comes from the signed GitHub login token for normal users. In shared bearer-token mode, the CLI sends `CRABBOX_OWNER`, Git email env, or local `git config user.email`; set `CRABBOX_ORG` to group leases under an org. Raw Cloudflare Access identity headers are ignored; only a verified Access JWT email can become the bearer-token owner.
 
-GitHub browser-login users see their own owner/org usage regardless of requested `--scope`, `--user`, or `--org`. Fleet-wide `--scope org` and `--scope all` views require shared-token admin auth.
+GitHub browser-login users see their own owner/org usage regardless of requested `--scope`, `--user`, or `--org`. Fleet-wide `--scope org` and `--scope all` views require admin-token auth.
 
 ## Scopes
 

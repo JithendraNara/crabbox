@@ -50,7 +50,7 @@ describe("fleet lease identity and idle", () => {
     const create = await fleet.fetch(
       request("POST", "/v1/leases", {
         headers: {
-          "cf-access-authenticated-user-email": "peter@example.com",
+          "x-crabbox-owner": "peter@example.com",
           "x-crabbox-org": "openclaw",
         },
         body: {
@@ -78,7 +78,7 @@ describe("fleet lease identity and idle", () => {
     const bySlug = await fleet.fetch(
       request("GET", "/v1/leases/blue-lobster", {
         headers: {
-          "cf-access-authenticated-user-email": "peter@example.com",
+          "x-crabbox-owner": "peter@example.com",
           "x-crabbox-org": "openclaw",
         },
       }),
@@ -99,7 +99,7 @@ describe("fleet lease identity and idle", () => {
     const create = await fleet.fetch(
       request("POST", "/v1/leases", {
         headers: {
-          "cf-access-authenticated-user-email": "peter@example.com",
+          "x-crabbox-owner": "peter@example.com",
           "cf-connecting-ip": "203.0.113.7",
           "x-crabbox-org": "openclaw",
         },
@@ -128,7 +128,7 @@ describe("fleet lease identity and idle", () => {
     const create = await fleet.fetch(
       request("POST", "/v1/leases", {
         headers: {
-          "cf-access-authenticated-user-email": "peter@example.com",
+          "x-crabbox-owner": "peter@example.com",
           "cf-connecting-ip": "203.0.113.7",
           "x-crabbox-org": "openclaw",
         },
@@ -174,7 +174,7 @@ describe("fleet lease identity and idle", () => {
     const usage = await fleet.fetch(
       request("GET", "/v1/usage?scope=all&owner=peter@example.com", {
         headers: {
-          "cf-access-authenticated-user-email": "friend@example.com",
+          "x-crabbox-owner": "friend@example.com",
           "x-crabbox-org": "openclaw",
         },
       }),
@@ -212,7 +212,7 @@ describe("fleet lease identity and idle", () => {
     const heartbeat = await fleet.fetch(
       request("POST", "/v1/leases/blue-lobster/heartbeat", {
         headers: {
-          "cf-access-authenticated-user-email": "peter@example.com",
+          "x-crabbox-owner": "peter@example.com",
           "x-crabbox-org": "openclaw",
         },
         body: { idleTimeoutSeconds: 2400 },
@@ -248,7 +248,7 @@ describe("fleet lease identity and idle", () => {
       }),
     );
     const friendHeaders = {
-      "cf-access-authenticated-user-email": "friend@example.com",
+      "x-crabbox-owner": "friend@example.com",
       "x-crabbox-org": "openclaw",
     };
 
@@ -278,7 +278,7 @@ describe("fleet lease identity and idle", () => {
     const denied = await fleet.fetch(
       request("GET", "/v1/pool", {
         headers: {
-          "cf-access-authenticated-user-email": "friend@example.com",
+          "x-crabbox-owner": "friend@example.com",
           "x-crabbox-org": "openclaw",
         },
       }),
@@ -344,7 +344,7 @@ describe("fleet run history", () => {
   it("records finished runs and serves logs", async () => {
     const fleet = testFleet();
     const ownerHeaders = {
-      "cf-access-authenticated-user-email": "peter@example.com",
+      "x-crabbox-owner": "peter@example.com",
       "x-crabbox-org": "openclaw",
     };
     const create = await fleet.fetch(
@@ -429,7 +429,7 @@ describe("fleet run history", () => {
       }),
     );
     const friendHeaders = {
-      "cf-access-authenticated-user-email": "friend@example.com",
+      "x-crabbox-owner": "friend@example.com",
       "x-crabbox-org": "openclaw",
     };
 
@@ -520,7 +520,7 @@ describe("fleet identity", () => {
     const response = await fleet.fetch(
       request("GET", "/v1/whoami", {
         headers: {
-          "cf-access-authenticated-user-email": "peter@example.com",
+          "x-crabbox-owner": "peter@example.com",
           "x-crabbox-org": "openclaw",
         },
       }),

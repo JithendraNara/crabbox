@@ -9,6 +9,8 @@
     "CRABBOX_PUBLIC_URL": "https://crabbox.openclaw.ai",
     "CRABBOX_DEFAULT_ORG": "openclaw",
     "CRABBOX_GITHUB_ALLOWED_ORG": "openclaw",
+    "CRABBOX_ACCESS_TEAM_DOMAIN": "crabbox-openclaw.cloudflareaccess.com",
+    "CRABBOX_ACCESS_AUD": "2c79b4c28dd40029b75b1e8d36d9a945ddc864dd40a34e50f6538bae8a3633ea",
     "CRABBOX_AWS_REGION": "eu-west-1",
   },
   "routes": [

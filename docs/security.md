@@ -28,10 +28,12 @@ MVP:
 - `crabbox-access.openclaw.ai` is service-token-only and the policy is scoped to the local Crabbox CLI service token.
 - `crabbox login` opens GitHub, receives a signed user token from the coordinator, and stores it in local config.
 - Workers.dev automation can still use a shared bearer token via `crabbox login --token-stdin`.
+- Admin routes require a separate admin bearer token configured as `CRABBOX_ADMIN_TOKEN` in the Worker and `broker.adminToken` or `CRABBOX_COORDINATOR_ADMIN_TOKEN` locally.
 - The CLI sends owner/org headers only for shared-token automation; GitHub login tokens carry owner/org inside the signed token.
 - `CRABBOX_GITHUB_ALLOWED_TEAMS` can restrict browser-login tokens to selected GitHub team slugs after allowed-org membership passes.
 - GitHub browser-login tokens are user tokens, not admin tokens. They can only see and mutate leases, runs, logs, and usage for their own owner/org identity.
 - The Worker forwards signed GitHub token owner/org identity to the Fleet Durable Object and strips caller-supplied Access identity headers from that forwarded request.
+- Raw Cloudflare Access identity headers are not trusted. If the Worker uses an Access identity, it first verifies `Cf-Access-Jwt-Assertion` against the configured Access team certs and application audience.
 - Missing shared-token config fails closed for non-health coordinator routes.
 
 Target:
@@ -49,7 +51,7 @@ maintainer: shared warm pool access
 admin: drain machines, cleanup, view all leases/runs/pool/usage, deploy
 ```
 
-Admin identity uses the shared operator token. Browser-login users can optionally be limited by GitHub team slug in Worker config.
+Admin identity uses a separate admin token. Shared operator tokens are for normal automation. Browser-login users can optionally be limited by GitHub team slug in Worker config.
 
 ## Secrets
 
@@ -64,9 +66,12 @@ Rules:
 - Never log env values.
 - Redact known secret-looking strings in diagnostics.
 - `CRABBOX_SHARED_TOKEN` is stored as a Worker secret for trusted operator automation; local automation can use `CRABBOX_COORDINATOR_TOKEN`.
+- `CRABBOX_ADMIN_TOKEN` is stored as a Worker secret for admin and image lifecycle routes; local admin commands use `CRABBOX_COORDINATOR_ADMIN_TOKEN` or `broker.adminToken`.
 - `CRABBOX_GITHUB_CLIENT_ID`, `CRABBOX_GITHUB_CLIENT_SECRET`, and `CRABBOX_SESSION_SECRET` are Worker secrets for browser login.
 - `CRABBOX_GITHUB_ALLOWED_ORG(S)` and `CRABBOX_GITHUB_ALLOWED_TEAMS` are Worker config values for browser-login authorization.
+- `CRABBOX_ACCESS_TEAM_DOMAIN` and `CRABBOX_ACCESS_AUD` let the Worker verify Cloudflare Access JWTs before using Access-provided identity.
 - `CRABBOX_ACCESS_CLIENT_ID` and `CRABBOX_ACCESS_CLIENT_SECRET` are local Cloudflare Access service-token credentials. Store them only in user config or env, never repo config. They only satisfy Cloudflare Access; they do not authorize Crabbox actions by themselves.
+- User config files are written `0600`; `crabbox doctor` reports overly broad local config permissions because broker tokens may be stored there.
 
 Project allowlist example:
 

@@ -7,6 +7,8 @@ Crabbox 0.3.0 adds the first trusted-operator image lifecycle for AWS runners: o
 ### Added
 
 - Added the Access-protected coordinator route `https://crabbox-access.openclaw.ai` for service-token proof and hardened automation.
+- Added separate coordinator admin-token auth so shared operator tokens no longer grant admin routes.
+- Added Cloudflare Access JWT verification before Access identity can affect bearer-token ownership.
 - Added `crabbox image create --id <cbx_id> --name <ami-name> [--wait]` for trusted operators to create AWS AMIs from active brokered AWS leases.
 - Added `crabbox image promote <ami-id>` for trusted operators to promote an available AMI as the coordinator default for future brokered AWS leases.
 - Added JSON output and wait polling for image creation, including `--wait-timeout` and `--no-reboot` controls.
@@ -21,6 +23,7 @@ Crabbox 0.3.0 adds the first trusted-operator image lifecycle for AWS runners: o
 - Brokered AWS lease creation now uses the promoted AWS image when no explicit `awsAMI` or `CRABBOX_AWS_AMI` override is supplied.
 - Image route validation now rejects noncanonical lease IDs, invalid AMI IDs, invalid AMI names, non-AWS leases, and promotion attempts before an image reaches `available`.
 - Moved the deployed coordinator route to the OpenClaw Cloudflare account at `https://crabbox.openclaw.ai` and scoped default broker org/auth settings to `openclaw`.
+- User config writes now force `0600` permissions, and `crabbox doctor` reports overly broad config permissions.
 
 ### Fixed
 

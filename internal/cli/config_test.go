@@ -12,6 +12,8 @@ func clearConfigEnv(t *testing.T) {
 	for _, key := range []string{
 		"CRABBOX_COORDINATOR",
 		"CRABBOX_COORDINATOR_TOKEN",
+		"CRABBOX_COORDINATOR_ADMIN_TOKEN",
+		"CRABBOX_ADMIN_TOKEN",
 		"CRABBOX_ACCESS_CLIENT_ID",
 		"CRABBOX_ACCESS_CLIENT_SECRET",
 		"CRABBOX_ACCESS_TOKEN",
@@ -38,6 +40,7 @@ func TestLoadConfigFromUserFile(t *testing.T) {
 	if err := os.WriteFile(path, []byte(`broker:
   url: https://crabbox.example.test
   token: secret
+  adminToken: admin-secret
   provider: aws
   access:
     clientId: access-client
@@ -122,7 +125,7 @@ ssh:
 	if cfg.ServerType != "c7a.8xlarge" {
 		t.Fatalf("ServerType=%q want c7a.8xlarge", cfg.ServerType)
 	}
-	if cfg.Coordinator != "https://crabbox.example.test" || cfg.CoordToken != "secret" {
+	if cfg.Coordinator != "https://crabbox.example.test" || cfg.CoordToken != "secret" || cfg.CoordAdminToken != "admin-secret" {
 		t.Fatalf("broker config not loaded: %#v", cfg)
 	}
 	if cfg.Access.ClientID != "access-client" || cfg.Access.ClientSecret != "access-secret" || cfg.Access.Token != "access-jwt" {
@@ -190,6 +193,7 @@ func TestEnvOverridesConfig(t *testing.T) {
 	t.Setenv("CRABBOX_ACCESS_CLIENT_ID", "env-access-client")
 	t.Setenv("CRABBOX_ACCESS_CLIENT_SECRET", "env-access-secret")
 	t.Setenv("CRABBOX_ACCESS_TOKEN", "env-access-jwt")
+	t.Setenv("CRABBOX_COORDINATOR_ADMIN_TOKEN", "env-admin-secret")
 	path := userConfigPath()
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		t.Fatal(err)
@@ -213,6 +217,9 @@ func TestEnvOverridesConfig(t *testing.T) {
 	}
 	if cfg.Access.ClientID != "env-access-client" || cfg.Access.ClientSecret != "env-access-secret" || cfg.Access.Token != "env-access-jwt" {
 		t.Fatalf("unexpected access config: %#v", cfg.Access)
+	}
+	if cfg.CoordAdminToken != "env-admin-secret" {
+		t.Fatalf("unexpected admin token state: %q", cfg.CoordAdminToken)
 	}
 }
 
@@ -309,6 +316,33 @@ func TestConfigHelperBranches(t *testing.T) {
 	}
 	if file.Profile != "written" || file.Provider != "aws" {
 		t.Fatalf("file config=%#v", file)
+	}
+	info, err := os.Stat(cfgPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := info.Mode().Perm(); got != 0o600 {
+		t.Fatalf("config mode=%04o want 0600", got)
+	}
+
+	if err := os.Chmod(cfgPath, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := writeUserFileConfig(fileConfig{Profile: "rewritten"}); err != nil {
+		t.Fatal(err)
+	}
+	info, err = os.Stat(cfgPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := info.Mode().Perm(); got != 0o600 {
+		t.Fatalf("rewritten config mode=%04o want 0600", got)
+	}
+	if err := os.Chmod(cfgPath, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if got := configFilePermissionProblem(cfgPath); got == "" {
+		t.Fatal("expected config permission problem")
 	}
 
 	empty, err := readFileConfig(filepath.Join(t.TempDir(), "missing.yaml"))

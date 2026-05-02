@@ -28,8 +28,8 @@ to this route must pass two checks:
 
 1. Cloudflare Access accepts the service-token headers before the request
    reaches the Worker.
-2. The Crabbox Worker accepts either the shared operator bearer token or a
-   signed Crabbox user token.
+2. The Crabbox Worker accepts either the shared operator bearer token, the
+   separate admin bearer token for admin routes, or a signed Crabbox user token.
 
 That means the Access service token is not a Crabbox admin token. It only gets
 the HTTP request through Cloudflare Access. The Worker still decides what the
@@ -73,7 +73,7 @@ least one team after org membership passes. Entries are GitHub team slugs. Use
 `team-slug` for the selected org or `org/team-slug` when multiple orgs are
 allowed.
 
-Trusted automation can still use the shared operator bearer token configured in the CLI and Worker. The CLI sends:
+Trusted automation can still use the shared operator bearer token configured in the CLI and Worker. Shared-token callers are normal automation, not admin callers. The CLI sends:
 
 ```text
 Authorization: Bearer <token>
@@ -87,7 +87,10 @@ send Access credentials before the Worker receives the request. Configure
 Access service token, or `CRABBOX_ACCESS_TOKEN` to forward an already minted
 Access JWT as `cf-access-token`. These Access credentials only satisfy
 Cloudflare Access; the Worker still requires the Crabbox bearer token or a
-signed Crabbox user token.
+signed Crabbox user token. When `CRABBOX_ACCESS_TEAM_DOMAIN` and
+`CRABBOX_ACCESS_AUD` are configured, the Worker verifies
+`Cf-Access-Jwt-Assertion` against Cloudflare Access certs before using any
+Access identity. Raw `cf-access-authenticated-user-email` headers are ignored.
 
 The live Access-protected route is `https://crabbox-access.openclaw.ai`. Its Access app is service-token-only (`non_identity`) and currently allows the local Crabbox CLI service token, so automated clients can prove both layers independently: first Cloudflare Access, then the Worker bearer or signed user token.
 
@@ -97,6 +100,7 @@ Local config shape:
 broker:
   url: https://crabbox.openclaw.ai
   token: <crabbox-shared-token-or-user-token>
+  adminToken: <crabbox-admin-token>
   access:
     clientId: <cloudflare-access-client-id>
     clientSecret: <cloudflare-access-client-secret>
@@ -130,9 +134,18 @@ GIT_COMMITTER_EMAIL
 git config user.email
 ```
 
-`CRABBOX_ORG` sets the org header. When a request comes through Cloudflare Access and Access identity is forwarded, that Access email wins over the CLI-provided owner. Normal `crabbox login` requests use the signed GitHub token identity.
+`CRABBOX_ORG` sets the org header. Raw Cloudflare Access email headers do not
+override CLI-provided owner/org headers. If the Worker can verify an Access JWT
+and that JWT contains an email, that verified Access email becomes the bearer
+request owner. Normal `crabbox login` requests use the signed GitHub token
+identity.
 
-GitHub user tokens are signed by the Worker and are not admin tokens. Admin routes require the shared operator token. The `crabbox.openclaw.ai/*` route is the canonical CLI and browser-login endpoint. `crabbox-access.openclaw.ai/*` is the service-token-protected endpoint. `https://crabbox-coordinator.services-91b.workers.dev` and `crabbox.clawd.bot/*` are fallbacks.
+GitHub user tokens are signed by the Worker and are not admin tokens. Admin
+routes require the separate admin token. The `crabbox.openclaw.ai/*` route is
+the canonical CLI and browser-login endpoint. `crabbox-access.openclaw.ai/*` is
+the service-token-protected endpoint.
+`https://crabbox-coordinator.services-91b.workers.dev` and `crabbox.clawd.bot/*`
+are fallbacks.
 
 Related docs:
 

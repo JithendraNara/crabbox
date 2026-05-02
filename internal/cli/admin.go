@@ -32,7 +32,7 @@ func (a App) adminLeases(ctx context.Context, args []string) error {
 	if err := parseFlags(fs, args); err != nil {
 		return err
 	}
-	coord, err := configuredCoordinator()
+	coord, err := configuredAdminCoordinator()
 	if err != nil {
 		return err
 	}
@@ -72,7 +72,7 @@ func (a App) adminRelease(ctx context.Context, args []string) error {
 	if jsonAnywhere {
 		*jsonOut = true
 	}
-	coord, err := configuredCoordinator()
+	coord, err := configuredAdminCoordinator()
 	if err != nil {
 		return err
 	}
@@ -112,7 +112,7 @@ func (a App) adminDelete(ctx context.Context, args []string) error {
 	if !*force {
 		return exit(2, "admin delete requires --force")
 	}
-	coord, err := configuredCoordinator()
+	coord, err := configuredAdminCoordinator()
 	if err != nil {
 		return err
 	}
@@ -138,6 +138,25 @@ func configuredCoordinator() (*CoordinatorClient, error) {
 	}
 	if !ok {
 		return nil, exit(2, "command requires a configured coordinator")
+	}
+	return coord, nil
+}
+
+func configuredAdminCoordinator() (*CoordinatorClient, error) {
+	cfg, err := loadConfig()
+	if err != nil {
+		return nil, err
+	}
+	if cfg.CoordAdminToken == "" {
+		return nil, exit(2, "admin command requires broker.adminToken or CRABBOX_COORDINATOR_ADMIN_TOKEN")
+	}
+	cfg.CoordToken = cfg.CoordAdminToken
+	coord, ok, err := newCoordinatorClient(cfg)
+	if err != nil {
+		return nil, err
+	}
+	if !ok {
+		return nil, exit(2, "admin command requires a configured coordinator")
 	}
 	return coord, nil
 }

@@ -30,6 +30,14 @@ func (a App) doctor(ctx context.Context, args []string) error {
 	if err != nil {
 		return err
 	}
+	if problem := configFilePermissionProblem(writableConfigPath()); problem != "" {
+		fmt.Fprintf(a.Stdout, "failed  config   %s: %s\n", writableConfigPath(), problem)
+		ok = false
+	} else if path := writableConfigPath(); path != "" {
+		if _, err := os.Stat(path); err == nil {
+			fmt.Fprintf(a.Stdout, "ok      config   %s permissions=0600\n", path)
+		}
+	}
 	cfg.Provider = *provider
 	if *id != "" {
 		_, target, _, err := a.resolveLeaseTarget(ctx, cfg, *id)
@@ -56,11 +64,25 @@ func (a App) doctor(ctx context.Context, args []string) error {
 			ok = false
 		} else {
 			fmt.Fprintf(a.Stdout, "ok      coord    %s access=%s\n", cfg.Coordinator, accessAuthState(cfg.Access))
-			if machines, err := coord.Pool(ctx, cfg); err != nil {
+			if whoami, err := coord.Whoami(ctx); err != nil {
 				fmt.Fprintf(a.Stdout, "failed  broker   %v\n", err)
 				ok = false
 			} else {
-				fmt.Fprintf(a.Stdout, "ok      broker   provider=%s machines=%d default_type=%s\n", cfg.Provider, len(machines), cfg.ServerType)
+				fmt.Fprintf(a.Stdout, "ok      broker   auth=%s owner=%s org=%s default_type=%s\n", whoami.Auth, whoami.Owner, whoami.Org, cfg.ServerType)
+			}
+			if cfg.CoordAdminToken != "" {
+				adminCfg := cfg
+				adminCfg.CoordToken = cfg.CoordAdminToken
+				adminCoord, _, err := newCoordinatorClient(adminCfg)
+				if err != nil {
+					return err
+				}
+				if machines, err := adminCoord.Pool(ctx, cfg); err != nil {
+					fmt.Fprintf(a.Stdout, "failed  admin    %v\n", err)
+					ok = false
+				} else {
+					fmt.Fprintf(a.Stdout, "ok      admin    provider=%s machines=%d\n", cfg.Provider, len(machines))
+				}
 			}
 		}
 	}

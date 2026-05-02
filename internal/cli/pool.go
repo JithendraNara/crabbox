@@ -30,9 +30,17 @@ func (a App) list(ctx context.Context, args []string) error {
 	if isBlacksmithProvider(cfg.Provider) {
 		return a.blacksmithList(ctx, cfg, *jsonOut)
 	}
-	if coord, ok, err := newCoordinatorClient(cfg); err != nil {
+	if _, ok, err := newCoordinatorClient(cfg); err != nil {
 		return err
 	} else if ok {
+		if cfg.CoordAdminToken == "" {
+			return exit(2, "pool list requires broker.adminToken or CRABBOX_COORDINATOR_ADMIN_TOKEN when a coordinator is configured")
+		}
+		cfg.CoordToken = cfg.CoordAdminToken
+		coord, _, err := newCoordinatorClient(cfg)
+		if err != nil {
+			return err
+		}
 		machines, err := coord.Pool(ctx, cfg)
 		if err != nil {
 			return err

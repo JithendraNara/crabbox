@@ -102,7 +102,7 @@ X-Crabbox-Owner: <email>
 X-Crabbox-Org: <org>
 ```
 
-Owner is resolved from the signed GitHub token for `crabbox login` users. In shared-token mode, owner comes from `CRABBOX_OWNER`, the Git email env, or `git config user.email`; `CRABBOX_ORG` sets the org. If a fallback route forwards Cloudflare Access identity, that Access email wins over shared-token owner headers.
+Owner is resolved from the signed GitHub token for `crabbox login` users. In shared-token mode, owner comes from `CRABBOX_OWNER`, the Git email env, or `git config user.email`; `CRABBOX_ORG` sets the org. Raw Cloudflare Access identity headers are ignored; only a verified Access JWT email can become the bearer-token owner.
 
 ## Sync Model
 

@@ -26,11 +26,7 @@ export function bearerToken(request: Request): string {
 }
 
 export function requestOwner(request: Request): string {
-  return (
-    request.headers.get("x-crabbox-owner") ??
-    request.headers.get("cf-access-authenticated-user-email") ??
-    "unknown"
-  );
+  return request.headers.get("x-crabbox-owner") ?? "unknown";
 }
 
 export function pathParts(request: Request): string[] {

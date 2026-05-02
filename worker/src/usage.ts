@@ -78,11 +78,6 @@ export function requestOrg(request: Request, env: Pick<Env, "CRABBOX_DEFAULT_ORG
   if (env.CRABBOX_DEFAULT_ORG) {
     return sanitizeOrg(env.CRABBOX_DEFAULT_ORG);
   }
-  const owner = request.headers.get("cf-access-authenticated-user-email") ?? "";
-  const at = owner.lastIndexOf("@");
-  if (at >= 0 && at < owner.length - 1) {
-    return sanitizeOrg(owner.slice(at + 1));
-  }
   return "unknown";
 }
 

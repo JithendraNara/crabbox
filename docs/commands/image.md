@@ -7,7 +7,9 @@ crabbox image create --id cbx_... --name openclaw-crabbox-20260501-1246 --wait
 crabbox image promote ami-...
 ```
 
-Image commands require a configured coordinator and shared-token admin auth.
+Image commands require a configured coordinator and admin-token auth. Set
+`broker.adminToken` or `CRABBOX_COORDINATOR_ADMIN_TOKEN` locally; the Worker
+checks `CRABBOX_ADMIN_TOKEN`.
 They are intentionally not available to normal GitHub browser-login users.
 
 ## create

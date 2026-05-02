@@ -85,7 +85,7 @@ CRABBOX_MAX_MONTHLY_USD_PER_ORG
 CRABBOX_DEFAULT_ORG
 ```
 
-For signed GitHub login tokens, owner/org is embedded in the token that the Worker forwards to the Fleet Durable Object. In shared-token automation, the CLI sends `X-Crabbox-Owner` from `CRABBOX_OWNER`, Git author/committer email env, or local `git config user.email`, and sends `X-Crabbox-Org` from `CRABBOX_ORG` when set. If a fallback route forwards Cloudflare Access identity, that Access email wins over shared-token owner headers.
+For signed GitHub login tokens, owner/org is embedded in the token that the Worker forwards to the Fleet Durable Object. In shared-token automation, the CLI sends `X-Crabbox-Owner` from `CRABBOX_OWNER`, Git author/committer email env, or local `git config user.email`, and sends `X-Crabbox-Org` from `CRABBOX_ORG` when set. Raw Cloudflare Access identity headers are ignored; only a verified Access JWT email can become the bearer-token owner.
 
 If a new lease would exceed a configured active-lease or monthly reserved-cost limit, the coordinator returns `cost_limit_exceeded` and does not provision the machine.
 

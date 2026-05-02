@@ -47,6 +47,7 @@ func (a App) configShow(args []string) error {
 		"serverType":       cfg.ServerType,
 		"coordinator":      cfg.Coordinator,
 		"brokerAuth":       tokenState(cfg.CoordToken),
+		"brokerAdminAuth":  tokenState(cfg.CoordAdminToken),
 		"accessAuth":       accessAuthState(cfg.Access),
 		"sshKey":           cfg.SSHKey,
 		"sshUser":          cfg.SSHUser,
@@ -125,7 +126,7 @@ func (a App) configShow(args []string) error {
 	}
 	fmt.Fprintf(a.Stdout, "config=%s\n", userConfigPath())
 	fmt.Fprintf(a.Stdout, "provider=%s class=%s type=%s profile=%s\n", cfg.Provider, cfg.Class, cfg.ServerType, cfg.Profile)
-	fmt.Fprintf(a.Stdout, "broker=%s auth=%s\n", blank(cfg.Coordinator, "-"), tokenState(cfg.CoordToken))
+	fmt.Fprintf(a.Stdout, "broker=%s auth=%s admin_auth=%s\n", blank(cfg.Coordinator, "-"), tokenState(cfg.CoordToken), tokenState(cfg.CoordAdminToken))
 	fmt.Fprintf(a.Stdout, "access_auth=%s\n", accessAuthState(cfg.Access))
 	fmt.Fprintf(a.Stdout, "ssh=%s@<host>:%s fallback_ports=%s key=%s\n", cfg.SSHUser, cfg.SSHPort, blank(strings.Join(cfg.SSHFallbackPorts, ","), "-"), cfg.SSHKey)
 	fmt.Fprintf(a.Stdout, "sync delete=%t checksum=%t git_seed=%t fingerprint=%t base_ref=%s excludes=%d timeout=%s\n", cfg.Sync.Delete, cfg.Sync.Checksum, cfg.Sync.GitSeed, cfg.Sync.Fingerprint, blank(cfg.Sync.BaseRef, "-"), len(configuredExcludes(cfg)), cfg.Sync.Timeout)
@@ -144,6 +145,7 @@ func (a App) configSetBroker(args []string) error {
 	url := fs.String("url", "", "broker URL")
 	provider := fs.String("provider", "", "default provider: hetzner or aws")
 	tokenStdin := fs.Bool("token-stdin", false, "read broker token from stdin")
+	adminTokenStdin := fs.Bool("admin-token-stdin", false, "read broker admin token from stdin")
 	if err := parseFlags(fs, args); err != nil {
 		return err
 	}
@@ -161,6 +163,17 @@ func (a App) configSetBroker(args []string) error {
 			return exit(2, "broker token from stdin is empty")
 		}
 	}
+	var adminToken string
+	if *adminTokenStdin {
+		data, err := io.ReadAll(os.Stdin)
+		if err != nil {
+			return exit(2, "read broker admin token: %v", err)
+		}
+		adminToken = strings.TrimSpace(string(data))
+		if adminToken == "" {
+			return exit(2, "broker admin token from stdin is empty")
+		}
+	}
 	path := writableConfigPath()
 	if path == "" {
 		return exit(2, "user config directory is unavailable")
@@ -176,6 +189,9 @@ func (a App) configSetBroker(args []string) error {
 	if token != "" {
 		file.Broker.Token = token
 	}
+	if adminToken != "" {
+		file.Broker.AdminToken = adminToken
+	}
 	if *provider != "" {
 		file.Broker.Provider = *provider
 		file.Provider = *provider
@@ -184,7 +200,7 @@ func (a App) configSetBroker(args []string) error {
 	if err != nil {
 		return err
 	}
-	fmt.Fprintf(a.Stdout, "wrote %s broker=%s auth=%s\n", written, *url, tokenState(file.Broker.Token))
+	fmt.Fprintf(a.Stdout, "wrote %s broker=%s auth=%s admin_auth=%s\n", written, *url, tokenState(file.Broker.Token), tokenState(file.Broker.AdminToken))
 	return nil
 }
 
