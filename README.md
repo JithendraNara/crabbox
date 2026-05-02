@@ -1,5 +1,9 @@
 # 🦀 Crabbox
 
+[![CI](https://github.com/openclaw/crabbox/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/openclaw/crabbox/actions/workflows/ci.yml)
+[![Release](https://github.com/openclaw/crabbox/actions/workflows/release.yml/badge.svg)](https://github.com/openclaw/crabbox/actions/workflows/release.yml)
+[![Latest release](https://img.shields.io/github/v/release/openclaw/crabbox?sort=semver)](https://github.com/openclaw/crabbox/releases/latest)
+
 **Warm a box, sync the diff, run the suite.**
 
 Crabbox is an open-source remote testbox runner for maintainers and AI agents. Lease a fast Linux machine on owned cloud capacity, sync your dirty checkout, run a command remotely, stream output, and release. Local edit-save-run loop, cloud-grade compute.
@@ -22,6 +26,8 @@ crabbox --version
 No Homebrew? Grab a [GoReleaser archive](https://github.com/openclaw/crabbox/releases) for macOS, Linux, or Windows.
 
 Prerequisites on the laptop: `git`, `ssh`, `ssh-keygen`, `rsync`, `curl`.
+
+Current stable release: [v0.3.0](https://github.com/openclaw/crabbox/releases/tag/v0.3.0).
 
 ## Quick start
 
@@ -66,11 +72,15 @@ For the full mental model, see [How Crabbox Works](docs/how-it-works.md). For th
 ## Highlights
 
 - **One-shot or warm.** `crabbox run` for fire-and-forget; `crabbox warmup` + `--id` for repeated runs against the same box.
+- **Run observability.** Every coordinator-backed run gets an early `run_...` handle. Use `crabbox attach <run-id>` while it is active, `crabbox events <run-id> --after <seq> --limit <n>` for durable lifecycle/output events, and `crabbox logs <run-id>` for retained output after completion.
+- **Stable timing records.** `--timing-json` on `run`, `warmup`, and `actions hydrate` gives scripts one machine-readable sync/command/total timing schema across AWS, Hetzner, and Blacksmith Testboxes.
 - **Local-first sync.** No clean-checkout requirement. Tracked + nonignored files only, fingerprint skip on no-op runs, sanity checks against suspicious mass deletions, optional shallow base-ref hydration for changed-test workflows.
 - **Brokered cloud.** Maintainers and agents share infra without sharing provider tokens. Hetzner and AWS EC2 Spot are first-class; both fall back across instance families when capacity or quota rejects a request.
 - **Blacksmith Testbox wrapper.** Set `provider: blacksmith-testbox` to delegate warmup/run/list/status/stop to the Blacksmith CLI while Crabbox keeps local slugs, repo claims, timing summaries, and config conventions.
+- **Trusted AWS images.** Operators can create AMIs from active brokered AWS leases and promote a known-good image as the coordinator default.
 - **Cost guardrails.** Per-lease and monthly spend caps. Live pricing from EC2 Spot history or Hetzner server-type prices, with static fallbacks. `crabbox usage` summarizes spend by user, org, provider, and type.
 - **GitHub Actions hydration.** `crabbox actions hydrate` registers a leased box as an ephemeral Actions runner, so the repo's own workflow installs runtimes, services, and secrets. Crabbox does not parse Actions YAML.
+- **Hardened coordinator auth.** GitHub browser login, owner-scoped leases, admin-only routes, optional GitHub team allowlists, Cloudflare Access JWT verification, and service-token support keep normal use and operator automation separate.
 - **OpenClaw plugin.** The repo root is a native OpenClaw plugin. Agents drive Crabbox through `crabbox_run`, `crabbox_warmup`, `crabbox_status`, `crabbox_list`, and `crabbox_stop` instead of shelling out.
 - **Operator surface.** `doctor`, `init`, `status`, `inspect`, `list`, `usage`, `history`, `logs`, `results`, `cache`, `admin`, `cleanup`, plus `--json` output where it matters.
 
@@ -181,10 +191,6 @@ The GitHub Pages site at <https://openclaw.github.io/crabbox/> is generated from
 npm run docs:check
 open dist/docs-site/index.html
 ```
-
-## Status
-
-Crabbox 0.1.0 (2026-05-01) is the first public release. Working today: brokered Hetzner + AWS Spot provisioning, warm-box reuse, GitHub Actions hydration, cost guardrails, run history, JUnit summaries, OpenClaw plugin, and the full CLI surface listed above. **Not yet:** untrusted multi-tenant isolation — Crabbox today assumes shared trust between operators of a single broker.
 
 ## License
 
