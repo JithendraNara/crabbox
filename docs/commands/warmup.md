@@ -4,6 +4,7 @@
 
 ```sh
 crabbox warmup --class beast
+crabbox warmup --provider aws --class beast --market on-demand
 crabbox warmup --actions-runner
 crabbox warmup --provider blacksmith-testbox --blacksmith-workflow .github/workflows/ci-check-testbox.yml --blacksmith-job test
 ```
@@ -21,6 +22,7 @@ Flags:
 --profile <name>
 --class <name>
 --type <provider-type>
+--market spot|on-demand
 --ttl <duration>
 --idle-timeout <duration>
 --keep
@@ -35,6 +37,12 @@ Flags:
 
 `--idle-timeout` releases the lease after no touch for that duration, default `30m`. `--ttl` remains the maximum wall-clock lifetime, default `90m`.
 Warmup records a local claim tying the lease to the current repo; `--reclaim` overwrites an existing local claim for that lease.
+
+For AWS, `--market` overrides `capacity.market` for this lease. Use
+`--market on-demand` when Spot capacity is blocked or when a quota request was
+approved only for the standard On-Demand quota. Explicit `--type` still means
+exact type: Crabbox reports quota/capacity/policy failures instead of silently
+changing capacity.
 
 `--actions-runner` immediately registers the warm box as an ephemeral self-hosted GitHub Actions runner for the current repository. Most projects should prefer `crabbox actions hydrate --id <lease-id-or-slug>` after warmup because it also dispatches the workflow and waits for the ready marker.
 

@@ -30,11 +30,18 @@ AWS behavior:
 - tags instances, volumes, and Spot requests;
 - falls back across broad C/M/R instance families for class requests, including account policy and capacity rejections;
 - can fall back to a small burstable type when account policy rejects the high-core class candidates;
+- preflights applied Spot or On-Demand vCPU quotas when Service Quotas allows it, then records skipped candidates as quota attempts;
+- supports `--market spot|on-demand` on `warmup` and `run` for one-off capacity-market overrides;
 - uses Spot placement score across configured regions in direct AWS mode;
 - can fall back to On-Demand after Spot capacity/quota failures when configured;
 - fetches Spot price history when cost estimates need provider pricing.
 
 Explicit `--type` requests are treated as exact provider type requests. If that type is rejected, Crabbox fails clearly instead of silently choosing a different instance type. Remove `--type` and use a machine class when fallback is desired.
+
+`crabbox list` marks brokered provider machines as `orphan=no-active-lease`
+when their provider label references a lease that is no longer active in the
+coordinator. This is an operator hint only; `keep=true` machines are not
+deleted automatically.
 
 Machine classes map to provider-specific types:
 

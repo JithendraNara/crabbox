@@ -7,6 +7,9 @@ Crabbox 0.3.0 adds the first trusted-operator image lifecycle for AWS runners: o
 ### Added
 
 - Added `--timing-json` for `warmup`, `actions hydrate`, and `run` so provider comparisons can read stable sync, command, total, exit-code, and Actions run timing from one JSON record.
+- Added `--market spot|on-demand` to `warmup` and `run` so AWS capacity market choice no longer requires environment-only overrides.
+- Added best-effort AWS vCPU quota preflight for brokered launch fallback, with concise quota-code attempt metadata when a requested instance type cannot fit the applied quota.
+- Added coordinator-orphan hints to human `crabbox list` output when provider machines carry no active coordinator lease.
 - Added Blacksmith Testbox timing JSON output that reports delegated sync in the same schema as AWS and Hetzner runs.
 - Added the Access-protected coordinator route `https://crabbox-access.openclaw.ai` for service-token proof and hardened automation.
 - Added separate coordinator admin-token auth so shared operator tokens no longer grant admin routes.
@@ -25,6 +28,7 @@ Crabbox 0.3.0 adds the first trusted-operator image lifecycle for AWS runners: o
 ### Changed
 
 - Brokered AWS class requests now fall back through provider candidates, account-policy launch rejections, and a small burstable fallback instead of failing on the first Free Tier-ineligible high-core type.
+- Brokered AWS fallback now skips known quota-impossible candidates before calling `RunInstances`, while preserving explicit `--type` failure semantics.
 - Brokered lease records now keep the requested AWS instance type plus concise provisioning-attempt metadata when fallback chooses a different type.
 - Hydrated runs now skip the expensive Git base-ref hydration fetch when the remote base is already current enough for the local base SHA.
 - Coordinator run history now records the resolved lease provider/class/type when a lease exists, avoiding stale requested-type entries after fallback.
@@ -36,6 +40,7 @@ Crabbox 0.3.0 adds the first trusted-operator image lifecycle for AWS runners: o
 ### Fixed
 
 - Preserved explicit AWS `--type` requests as exact instance-type requests; Crabbox now fails clearly instead of silently falling back when the user asked for a specific type.
+- Fixed AWS On-Demand launches by omitting Spot request tag specifications when no Spot request is created.
 - Warned before running JavaScript package-manager commands on an unhydrated raw box when the repo declares an Actions hydration workflow.
 - Fixed responsive padding on the generated docs-site frontpage body content.
 - Fixed brokered AWS security-group creation by sending EC2's required `GroupDescription` parameter, restoring first-run AWS provisioning in fresh accounts.

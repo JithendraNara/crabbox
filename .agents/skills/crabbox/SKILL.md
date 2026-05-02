@@ -36,6 +36,7 @@ Warm a reusable box:
 
 ```sh
 crabbox warmup --idle-timeout 90m
+crabbox warmup --provider aws --class beast --market on-demand --idle-timeout 90m
 ```
 
 Hydrate it through a repository GitHub Actions workflow when CI-like setup,
@@ -80,6 +81,8 @@ CRABBOX_LIVE=1 CRABBOX_LIVE_REPO=/path/to/openclaw scripts/live-smoke.sh
 Use `--debug` on `run` when measuring sync timing.
 Use `--timing-json` on `warmup`, `actions hydrate`, and `run` when a stable
 machine-readable timing record is needed.
+Use `--market spot|on-demand` on AWS `warmup` or one-shot `run` when account
+quota or capacity testing needs a temporary market override.
 
 ## Hydration Boundary
 
@@ -97,3 +100,7 @@ Brokered leases have coordinator-owned idle expiry and local lease claims, so
 projects should not maintain their own lease ledger. Default idle timeout is 30
 minutes unless config or flags set a different value. Still stop boxes you
 created when done.
+
+When `crabbox list` prints `orphan=no-active-lease`, treat it as an operator
+review hint: verify the provider machine is not referenced by an active
+coordinator lease before deleting anything, especially if `keep=true` is set.

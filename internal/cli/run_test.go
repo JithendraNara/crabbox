@@ -3,6 +3,7 @@ package cli
 import (
 	"bytes"
 	"encoding/json"
+	"io"
 	"strings"
 	"testing"
 	"time"
@@ -84,6 +85,30 @@ func TestTimingJSONShape(t *testing.T) {
 	}
 	if len(got.SyncPhases) != 2 || got.SyncPhases[1].Name != "git_hydrate" || !got.SyncPhases[1].Skipped || got.SyncPhases[1].Reason != "marker base current" {
 		t.Fatalf("unexpected phases: %#v", got.SyncPhases)
+	}
+}
+
+func TestApplyCapacityMarketFlag(t *testing.T) {
+	fs := newFlagSet("test", io.Discard)
+	market := fs.String("market", "spot", "")
+	if err := parseFlags(fs, []string{"--market", "on-demand"}); err != nil {
+		t.Fatal(err)
+	}
+	cfg := defaultConfig()
+	if err := applyCapacityMarketFlag(&cfg, fs, *market); err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Capacity.Market != "on-demand" {
+		t.Fatalf("market=%s want on-demand", cfg.Capacity.Market)
+	}
+
+	fs = newFlagSet("test", io.Discard)
+	market = fs.String("market", "spot", "")
+	if err := parseFlags(fs, []string{"--market", "reserved"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := applyCapacityMarketFlag(&cfg, fs, *market); err == nil {
+		t.Fatal("expected invalid market failure")
 	}
 }
 

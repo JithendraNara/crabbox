@@ -45,12 +45,21 @@ func (a App) list(ctx context.Context, args []string) error {
 		if err != nil {
 			return err
 		}
+		activeLeases, err := coord.AdminLeases(ctx, "active", "", "", 1000)
+		if err != nil {
+			fmt.Fprintf(a.Stderr, "warning: active lease lookup failed; orphan status unavailable: %v\n", err)
+		}
+		activeLeaseIDs := activeCoordinatorLeaseIDs(activeLeases)
 		if *jsonOut {
 			return json.NewEncoder(a.Stdout).Encode(machines)
 		}
 		for _, s := range machines {
-			fmt.Fprintf(a.Stdout, "%-20s %-28s %-12s %-14s %-15s lease=%s slug=%s keep=%s\n",
-				s.ID, s.Name, s.Status, s.ServerType, s.Host, s.Labels["lease"], blank(s.Labels["slug"], "-"), s.Labels["keep"])
+			extra := ""
+			if err == nil {
+				extra = coordinatorMachineOrphanField(s.Labels, activeLeaseIDs)
+			}
+			fmt.Fprintf(a.Stdout, "%-20s %-28s %-12s %-14s %-15s lease=%s slug=%s keep=%s%s\n",
+				s.ID, s.Name, s.Status, s.ServerType, s.Host, s.Labels["lease"], blank(s.Labels["slug"], "-"), s.Labels["keep"], extra)
 		}
 		return nil
 	}
@@ -88,6 +97,27 @@ func (a App) list(ctx context.Context, args []string) error {
 			s.DisplayID(), s.Name, s.Status, s.ServerType.Name, s.PublicNet.IPv4.IP, s.Labels["lease"], blank(serverSlug(s), "-"), s.Labels["keep"])
 	}
 	return nil
+}
+
+func activeCoordinatorLeaseIDs(leases []CoordinatorLease) map[string]struct{} {
+	ids := make(map[string]struct{}, len(leases))
+	for _, lease := range leases {
+		if lease.ID != "" {
+			ids[lease.ID] = struct{}{}
+		}
+	}
+	return ids
+}
+
+func coordinatorMachineOrphanField(labels map[string]string, activeLeaseIDs map[string]struct{}) string {
+	leaseID := labels["lease"]
+	if leaseID == "" {
+		return " orphan=missing-lease-label"
+	}
+	if _, ok := activeLeaseIDs[leaseID]; !ok {
+		return " orphan=no-active-lease"
+	}
+	return ""
 }
 
 func (a App) machine(ctx context.Context, args []string) error {

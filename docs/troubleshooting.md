@@ -92,6 +92,7 @@ Symptoms:
 
 - class falls back from dedicated machines to smaller machines;
 - AWS Spot request cannot be fulfilled;
+- AWS reports `VcpuLimitExceeded` for large On-Demand instances;
 - server create fails before SSH.
 
 Checks:
@@ -99,15 +100,43 @@ Checks:
 ```sh
 bin/crabbox list --json
 bin/crabbox usage --scope all
+bin/crabbox warmup --provider aws --class beast --market on-demand --timing-json
 ```
 
 Fixes:
 
 - choose a smaller class;
+- use `--market on-demand` or `--market spot` for a one-off AWS capacity-market override;
 - set `CRABBOX_CAPACITY_REGIONS` for AWS Spot placement-score selection;
 - set `CRABBOX_CAPACITY_STRATEGY=most-available`;
+- raise the AWS `Running On-Demand Standard (A, C, D, H, I, M, R, T, Z) instances` quota for C/M/R/T/Z families, or the matching Spot quota when using Spot;
 - raise Hetzner dedicated-core quota when dedicated classes are required;
 - temporarily use AWS fallback capacity.
+
+Brokered AWS launch fallback records provisioning attempts. Quota preflight
+uses AWS Service Quotas when available and reports the quota code, applied vCPU
+limit, requested type, and required vCPUs before trying the next candidate.
+
+## Provider Machine Looks Orphaned
+
+Symptoms:
+
+- `crabbox list` shows `orphan=no-active-lease`;
+- provider console has a `crabbox-cbx_...` machine but `crabbox inspect` returns not found.
+
+Checks:
+
+```sh
+bin/crabbox list --provider hetzner
+bin/crabbox list --provider aws
+bin/crabbox admin leases --state active
+```
+
+Fixes:
+
+- do not delete `keep=true` machines automatically;
+- stop or delete only after checking that no active coordinator lease references the machine;
+- use `crabbox stop <lease-id-or-slug>` for active leases, and provider/admin cleanup only for confirmed orphaned machines.
 
 ## SSH Never Becomes Ready
 

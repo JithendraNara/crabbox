@@ -281,6 +281,10 @@ ssh:
     - "22"
 ```
 
+`crabbox warmup --market spot|on-demand` and `crabbox run --market spot|on-demand`
+override `capacity.market` for a single AWS lease. Use this for temporary quota
+or capacity shifts without rewriting repo config.
+
 Open GitHub browser login:
 
 ```sh

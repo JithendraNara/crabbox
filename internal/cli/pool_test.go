@@ -82,6 +82,34 @@ func TestDirectLeaseExpiresAtUsesTTLAsCap(t *testing.T) {
 	}
 }
 
+func TestCoordinatorMachineOrphanField(t *testing.T) {
+	active := activeCoordinatorLeaseIDs([]CoordinatorLease{{ID: "cbx_active"}})
+	tests := map[string]struct {
+		labels map[string]string
+		want   string
+	}{
+		"active lease": {
+			labels: map[string]string{"lease": "cbx_active"},
+			want:   "",
+		},
+		"missing lease label": {
+			labels: map[string]string{},
+			want:   " orphan=missing-lease-label",
+		},
+		"missing active lease": {
+			labels: map[string]string{"lease": "cbx_old"},
+			want:   " orphan=no-active-lease",
+		},
+	}
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			if got := coordinatorMachineOrphanField(tt.labels, active); got != tt.want {
+				t.Fatalf("orphan field=%q want %q", got, tt.want)
+			}
+		})
+	}
+}
+
 func TestHeartbeatInterval(t *testing.T) {
 	tests := map[time.Duration]time.Duration{
 		0:                time.Minute,

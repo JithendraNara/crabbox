@@ -5,6 +5,7 @@
 ```sh
 crabbox run --id blue-lobster -- pnpm test:changed:max
 crabbox run --class beast -- pnpm check
+crabbox run --provider aws --class beast --market on-demand -- pnpm check
 crabbox run --id blue-lobster --shell 'pnpm install --frozen-lockfile && pnpm test'
 crabbox run --id cbx_abcdef123456 --junit junit.xml -- go test ./...
 crabbox run --provider blacksmith-testbox --blacksmith-workflow .github/workflows/ci-check-testbox.yml --blacksmith-job test -- pnpm test
@@ -44,6 +45,7 @@ Flags:
 --profile <name>
 --class <name>
 --type <provider-type>
+--market spot|on-demand
 --ttl <duration>
 --idle-timeout <duration>
 --keep
@@ -64,5 +66,9 @@ Flags:
 
 `--idle-timeout` controls inactivity expiry, default `30m`. `--ttl` remains the maximum wall-clock lifetime, default `90m`.
 Crabbox records a local repo claim for each reused lease. If a lease is already claimed by another repo, use `--reclaim` to move the claim intentionally.
+
+For AWS one-shot leases, `--market` overrides `capacity.market` for this run.
+Explicit `--type` keeps exact-type semantics; Crabbox reports why that type
+failed rather than falling back to a different size.
 
 Blacksmith Testbox mode does not support `--sync-only`; Blacksmith owns its own sync behavior.

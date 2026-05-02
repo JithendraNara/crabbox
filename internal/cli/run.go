@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"flag"
 	"fmt"
 	"io"
 	"os"
@@ -9,6 +10,19 @@ import (
 	"strings"
 	"time"
 )
+
+func applyCapacityMarketFlag(cfg *Config, fs *flag.FlagSet, market string) error {
+	if !flagWasSet(fs, "market") {
+		return nil
+	}
+	switch market {
+	case "spot", "on-demand":
+		cfg.Capacity.Market = market
+		return nil
+	default:
+		return exit(2, "--market must be spot or on-demand")
+	}
+}
 
 func (a App) warmup(ctx context.Context, args []string) error {
 	started := time.Now()
@@ -18,6 +32,7 @@ func (a App) warmup(ctx context.Context, args []string) error {
 	profile := fs.String("profile", defaults.Profile, "profile")
 	class := fs.String("class", defaults.Class, "machine class")
 	serverType := fs.String("type", getenv("CRABBOX_SERVER_TYPE", ""), "provider server/instance type")
+	market := fs.String("market", defaults.Capacity.Market, "capacity market: spot or on-demand")
 	ttl := fs.Duration("ttl", defaults.TTL, "maximum lease lifetime")
 	idleTimeout := fs.Duration("idle-timeout", defaults.IdleTimeout, "idle timeout")
 	keep := fs.Bool("keep", true, "keep server after warmup")
@@ -38,6 +53,9 @@ func (a App) warmup(ctx context.Context, args []string) error {
 	if flagWasSet(fs, "type") {
 		cfg.ServerType = *serverType
 		cfg.ServerTypeExplicit = true
+	}
+	if err := applyCapacityMarketFlag(&cfg, fs, *market); err != nil {
+		return err
 	}
 	if cfg.ServerType == "" || ((flagWasSet(fs, "provider") || flagWasSet(fs, "class")) && !flagWasSet(fs, "type")) {
 		cfg.ServerType = serverTypeForProviderClass(cfg.Provider, *class)
@@ -120,6 +138,7 @@ func (a App) runCommand(ctx context.Context, args []string) error {
 	profile := fs.String("profile", defaults.Profile, "profile")
 	class := fs.String("class", defaults.Class, "machine class")
 	serverType := fs.String("type", getenv("CRABBOX_SERVER_TYPE", ""), "provider server/instance type")
+	market := fs.String("market", defaults.Capacity.Market, "capacity market: spot or on-demand")
 	ttl := fs.Duration("ttl", defaults.TTL, "maximum lease lifetime")
 	idleTimeout := fs.Duration("idle-timeout", defaults.IdleTimeout, "idle timeout")
 	leaseIDFlag := fs.String("id", "", "existing lease or server id")
@@ -155,6 +174,9 @@ func (a App) runCommand(ctx context.Context, args []string) error {
 	if flagWasSet(fs, "type") {
 		cfg.ServerType = *serverType
 		cfg.ServerTypeExplicit = true
+	}
+	if err := applyCapacityMarketFlag(&cfg, fs, *market); err != nil {
+		return err
 	}
 	if cfg.ServerType == "" || ((flagWasSet(fs, "provider") || flagWasSet(fs, "class")) && !flagWasSet(fs, "type")) {
 		cfg.ServerType = serverTypeForProviderClass(cfg.Provider, *class)
