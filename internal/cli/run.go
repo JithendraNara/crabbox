@@ -227,12 +227,14 @@ func (a App) runCommand(ctx context.Context, args []string) (err error) {
 		return err
 	}
 	recorder := &runRecorder{}
+	var runFailure error
+	recordFailure := func(failure error) error {
+		return recordRunFailure(&runFailure, failure)
+	}
 	if useCoordinator {
 		recorder = newRunRecorder(ctx, coord, cfg, command, a.Stderr)
 		defer func() {
-			if err != nil {
-				recorder.Failed(err)
-			}
+			recorder.Failed(runFailure)
 		}()
 		recorder.Event("leasing.started", "leasing", "")
 	}
@@ -265,7 +267,7 @@ func (a App) runCommand(ctx context.Context, args []string) (err error) {
 		acquired = true
 	}
 	if err != nil {
-		return err
+		return recordFailure(err)
 	}
 	applyResolvedServerConfig(&cfg, server)
 	if useCoordinator {
@@ -275,7 +277,7 @@ func (a App) runCommand(ctx context.Context, args []string) (err error) {
 		if acquired && !*keep {
 			a.releaseAcquiredLeaseBestEffort(ctx, cfg, coord, useCoordinator, server, target, leaseID)
 		}
-		return err
+		return recordFailure(err)
 	}
 	if !useCoordinator && leaseID != "" {
 		server = a.touchDirectLeaseBestEffort(ctx, cfg, server, blank(server.Labels["state"], "ready"))
@@ -295,7 +297,7 @@ func (a App) runCommand(ctx context.Context, args []string) (err error) {
 			if lease, err := coord.UpdateLeaseIdleTimeout(ctx, leaseID, *heartbeatIdleTimeout); err == nil {
 				fmt.Fprintf(a.Stderr, "updated idle_timeout=%s expires=%s\n", cfg.IdleTimeout, blank(lease.ExpiresAt, "-"))
 			} else {
-				return err
+				return recordFailure(err)
 			}
 		}
 		stopHeartbeat := startCoordinatorHeartbeat(ctx, coord, leaseID, cfg.IdleTimeout, heartbeatIdleTimeout, a.Stderr)
@@ -329,24 +331,24 @@ func (a App) runCommand(ctx context.Context, args []string) (err error) {
 		stepStart := time.Now()
 		recorder.Event("bootstrap.waiting", "bootstrap", "waiting for SSH before sync")
 		if err := waitForSSHReady(ctx, &target, a.Stderr, "before sync", 2*time.Minute); err != nil {
-			return err
+			return recordFailure(err)
 		}
 		recorder.Event("sync.started", "sync", "")
 		timings.syncSteps.sshReady = time.Since(stepStart)
 		stepStart = time.Now()
 		if err := runSSHQuiet(ctx, target, remoteMkdir(workdir)); err != nil {
-			return exit(7, "create remote workdir: %v", err)
+			return recordFailure(exit(7, "create remote workdir: %v", err))
 		}
 		timings.syncSteps.mkdir = time.Since(stepStart)
 		stepStart = time.Now()
 		manifest, err := syncManifest(repo.Root, configuredExcludes(cfg))
 		if err != nil {
-			return exit(6, "build sync file list: %v", err)
+			return recordFailure(exit(6, "build sync file list: %v", err))
 		}
 		timings.syncSteps.manifest = time.Since(stepStart)
 		stepStart = time.Now()
 		if err := checkSyncPreflight(manifest, cfg, *forceSyncLarge, a.Stderr); err != nil {
-			return err
+			return recordFailure(err)
 		}
 		timings.syncSteps.preflight = time.Since(stepStart)
 		fingerprint := ""
@@ -379,35 +381,35 @@ func (a App) runCommand(ctx context.Context, args []string) (err error) {
 		manifestData := manifest.NUL()
 		stepStart = time.Now()
 		if err := runSSHInputQuiet(ctx, target, remoteWriteSyncManifestNew(workdir), string(manifestData)); err != nil {
-			return exit(7, "write sync manifest: %v", err)
+			return recordFailure(exit(7, "write sync manifest: %v", err))
 		}
 		if err := runSSHInputQuiet(ctx, target, remoteWriteSyncDeletedNew(workdir), string(manifest.DeletedNUL())); err != nil {
-			return exit(7, "write sync delete manifest: %v", err)
+			return recordFailure(exit(7, "write sync delete manifest: %v", err))
 		}
 		timings.syncSteps.manifestWrite = time.Since(stepStart)
 		if cfg.Sync.Delete {
 			stepStart = time.Now()
 			if err := runSSHQuiet(ctx, target, remotePruneSyncManifest(workdir)); err != nil {
-				return exit(6, "remote sync prune failed: %v", err)
+				return recordFailure(exit(6, "remote sync prune failed: %v", err))
 			}
 			timings.syncSteps.prune = time.Since(stepStart)
 		}
 		stepStart = time.Now()
 		if err := rsync(ctx, target, repo.Root, workdir, configuredExcludes(cfg), a.Stdout, a.Stderr, rsyncOptions{Debug: *debugSync, Delete: cfg.Sync.Delete, Checksum: cfg.Sync.Checksum, UseFilesFrom: true, FilesFrom: manifestData, Timeout: cfg.Sync.Timeout, HeartbeatInterval: 15 * time.Second}); err != nil {
-			return exit(6, "rsync failed: %v", err)
+			return recordFailure(exit(6, "rsync failed: %v", err))
 		}
 		timings.syncSteps.rsync = time.Since(stepStart)
 		stepStart = time.Now()
 		if err := runSSHQuiet(ctx, target, remoteApplySyncManifest(workdir)); err != nil {
-			return exit(6, "remote sync manifest apply failed: %v", err)
+			return recordFailure(exit(6, "remote sync manifest apply failed: %v", err))
 		}
 		timings.syncSteps.manifestApply = time.Since(stepStart)
 		stepStart = time.Now()
 		if out, err := runSSHCombinedOutput(ctx, target, remoteSyncSanity(workdir, os.Getenv("CRABBOX_ALLOW_MASS_DELETIONS") == "1")); err != nil {
 			if out != "" {
-				return exit(6, "remote sync sanity failed: %s: %v", out, err)
+				return recordFailure(exit(6, "remote sync sanity failed: %s: %v", out, err))
 			}
-			return exit(6, "remote sync sanity failed: %v", err)
+			return recordFailure(exit(6, "remote sync sanity failed: %v", err))
 		}
 		timings.syncSteps.sanity = time.Since(stepStart)
 		baseSHA := gitHydrateBaseSHA(repo, cfg.Sync.BaseRef)
@@ -453,7 +455,7 @@ afterSync:
 		if *timingJSON {
 			total := time.Since(timings.started)
 			if err := writeTimingJSON(a.Stderr, timingReportFromRunWithActionsURL(cfg.Provider, leaseID, serverSlug(server), timings, total, 0, actionsURL)); err != nil {
-				return err
+				return recordFailure(err)
 			}
 		}
 		recorder.Finish(0, timings.sync, 0, "", false, nil)
@@ -463,11 +465,11 @@ afterSync:
 	commandStart := time.Now()
 	recorder.Event("bootstrap.waiting", "bootstrap", "waiting for SSH before command")
 	if err := waitForSSHReady(ctx, &target, a.Stderr, "before command", 2*time.Minute); err != nil {
-		return err
+		return recordFailure(err)
 	}
 	if *noSync {
 		if err := runSSHQuiet(ctx, target, remoteMkdir(workdir)); err != nil {
-			return exit(7, "create remote workdir: %v", err)
+			return recordFailure(exit(7, "create remote workdir: %v", err))
 		}
 	}
 	if !useCoordinator {
@@ -506,13 +508,20 @@ afterSync:
 	fmt.Fprintln(a.Stderr, formatRunSummary(timings, total, code))
 	if *timingJSON {
 		if err := writeTimingJSON(a.Stderr, timingReportFromRunWithActionsURL(cfg.Provider, leaseID, serverSlug(server), timings, total, code, actionsURL)); err != nil {
-			return err
+			return recordFailure(err)
 		}
 	}
 	if code != 0 {
-		return ExitError{Code: code, Message: fmt.Sprintf("remote command exited %d", code)}
+		return recordFailure(ExitError{Code: code, Message: fmt.Sprintf("remote command exited %d", code)})
 	}
 	return nil
+}
+
+func recordRunFailure(dst *error, failure error) error {
+	if dst != nil && failure != nil {
+		*dst = failure
+	}
+	return failure
 }
 
 type runTimings struct {

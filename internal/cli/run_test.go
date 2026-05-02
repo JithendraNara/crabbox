@@ -3,6 +3,7 @@ package cli
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"io"
 	"strings"
 	"testing"
@@ -138,5 +139,22 @@ func TestCommandNeedsHydrationHint(t *testing.T) {
 	}
 	if commandNeedsHydrationHint([]string{"go", "test", "./..."}, false) {
 		t.Fatal("go test should not need hydration hint")
+	}
+}
+
+func TestRecordRunFailureCapturesShadowedReturnErrors(t *testing.T) {
+	var recorded error
+	func() {
+		if err := errors.New("sync failed"); err != nil {
+			_ = recordRunFailure(&recorded, err)
+			return
+		}
+	}()
+	if recorded == nil || recorded.Error() != "sync failed" {
+		t.Fatalf("recorded=%v", recorded)
+	}
+	_ = recordRunFailure(&recorded, nil)
+	if recorded == nil || recorded.Error() != "sync failed" {
+		t.Fatalf("nil failure should not clear recorded error, got %v", recorded)
 	}
 }
