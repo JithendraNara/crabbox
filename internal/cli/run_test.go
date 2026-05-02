@@ -88,6 +88,26 @@ func TestTimingJSONShape(t *testing.T) {
 	}
 }
 
+func TestTimingJSONIncludesActionsRunURLWhenAvailable(t *testing.T) {
+	var buf bytes.Buffer
+	err := writeTimingJSON(&buf, timingReportFromRunWithActionsURL("aws", "cbx_123", "blue-crab", runTimings{
+		sync:    1200 * time.Millisecond,
+		command: 3400 * time.Millisecond,
+	}, 5*time.Second, 0, "https://github.com/openclaw/openclaw/actions/runs/123"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got struct {
+		ActionsRunURL string `json:"actionsRunUrl"`
+	}
+	if err := json.Unmarshal(buf.Bytes(), &got); err != nil {
+		t.Fatal(err)
+	}
+	if got.ActionsRunURL != "https://github.com/openclaw/openclaw/actions/runs/123" {
+		t.Fatalf("actionsRunUrl=%q", got.ActionsRunURL)
+	}
+}
+
 func TestApplyCapacityMarketFlag(t *testing.T) {
 	fs := newFlagSet("test", io.Discard)
 	market := fs.String("market", "spot", "")

@@ -47,6 +47,12 @@ func timingReportFromRun(provider, leaseID, slug string, timings runTimings, tot
 	}
 }
 
+func timingReportFromRunWithActionsURL(provider, leaseID, slug string, timings runTimings, total time.Duration, exitCode int, actionsRunURL string) timingReport {
+	report := timingReportFromRun(provider, leaseID, slug, timings, total, exitCode)
+	report.ActionsRunURL = actionsRunURL
+	return report
+}
+
 func syncTimingPhases(steps syncStepTimings) []timingPhase {
 	phases := make([]timingPhase, 0, 15)
 	appendDuration := func(name string, duration time.Duration) {

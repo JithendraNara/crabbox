@@ -308,10 +308,16 @@ func (a App) runCommand(ctx context.Context, args []string) (err error) {
 	timings := runTimings{started: time.Now()}
 	workdir := filepath.ToSlash(filepath.Join(cfg.WorkRoot, leaseID, repo.Name))
 	actionsEnvFile := ""
+	actionsURL := ""
 	hydratedByActions := false
 	if state, err := readActionsHydrationState(ctx, target, leaseID); err == nil && state.Workspace != "" {
 		workdir = state.Workspace
 		actionsEnvFile = state.EnvFile
+		if state.RunID != "" {
+			if ghRepo, err := resolveGitHubRepo(repo, cfg.Actions.Repo); err == nil {
+				actionsURL = actionsRunURL(ghRepo, state.RunID)
+			}
+		}
 		hydratedByActions = true
 		fmt.Fprintf(a.Stderr, "using GitHub Actions workspace %s\n", workdir)
 	} else if commandNeedsHydrationHint(command, *shellMode) && cfg.Actions.Workflow != "" {
@@ -446,7 +452,7 @@ afterSync:
 		fmt.Fprintln(a.Stderr, formatRunSummary(timings, time.Since(timings.started), 0))
 		if *timingJSON {
 			total := time.Since(timings.started)
-			if err := writeTimingJSON(a.Stderr, timingReportFromRun(cfg.Provider, leaseID, serverSlug(server), timings, total, 0)); err != nil {
+			if err := writeTimingJSON(a.Stderr, timingReportFromRunWithActionsURL(cfg.Provider, leaseID, serverSlug(server), timings, total, 0, actionsURL)); err != nil {
 				return err
 			}
 		}
@@ -499,7 +505,7 @@ afterSync:
 	fmt.Fprintf(a.Stderr, "command complete in %s total=%s\n", timings.command.Round(time.Millisecond), total.Round(time.Millisecond))
 	fmt.Fprintln(a.Stderr, formatRunSummary(timings, total, code))
 	if *timingJSON {
-		if err := writeTimingJSON(a.Stderr, timingReportFromRun(cfg.Provider, leaseID, serverSlug(server), timings, total, code)); err != nil {
+		if err := writeTimingJSON(a.Stderr, timingReportFromRunWithActionsURL(cfg.Provider, leaseID, serverSlug(server), timings, total, code, actionsURL)); err != nil {
 			return err
 		}
 	}
