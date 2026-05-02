@@ -99,12 +99,36 @@ func TestSSHArgsIncludeReliabilityOptions(t *testing.T) {
 		"ControlMaster=auto",
 		"ControlPersist=60s",
 		"ControlPath=",
-		"crabbox-ssh-%C",
-		"UserKnownHostsFile=/tmp/crabbox-lease/known_hosts",
+		"crabbox-ssh-",
+		"-%C",
+		`UserKnownHostsFile=/tmp/crabbox-lease/known_hosts`,
 	} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("sshArgs() missing %q in %q", want, got)
 		}
+	}
+}
+
+func TestSSHArgsQuoteKnownHostsPathWithSpaces(t *testing.T) {
+	got := strings.Join(sshArgs(SSHTarget{
+		User: "crabbox",
+		Host: "203.0.113.10",
+		Key:  "/tmp/Application Support/crabbox/id_ed25519",
+		Port: "2222",
+	}, "true"), "\n")
+	if !strings.Contains(got, `UserKnownHostsFile="/tmp/Application Support/crabbox/known_hosts"`) {
+		t.Fatalf("sshArgs() should quote known_hosts path with spaces: %q", got)
+	}
+}
+
+func TestSSHControlPathIsScopedByKey(t *testing.T) {
+	left := sshControlPath(SSHTarget{User: "crabbox", Key: "/tmp/lease-a/id_ed25519"})
+	right := sshControlPath(SSHTarget{User: "crabbox", Key: "/tmp/lease-b/id_ed25519"})
+	if left == right {
+		t.Fatalf("control paths should differ for different lease keys: %q", left)
+	}
+	if !strings.HasPrefix(filepath.Base(left), "crabbox-ssh-") || !strings.HasSuffix(left, "-%C") {
+		t.Fatalf("unexpected control path %q", left)
 	}
 }
 

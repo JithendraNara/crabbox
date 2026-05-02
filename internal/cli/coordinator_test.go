@@ -115,6 +115,29 @@ func TestCoordinatorTouchAndUpdateHeartbeatBodies(t *testing.T) {
 	}
 }
 
+func TestCoordinatorHeartbeatTouchesImmediately(t *testing.T) {
+	touches := make(chan struct{}, 1)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/leases/cbx_123/heartbeat" {
+			t.Fatalf("unexpected path %s", r.URL.Path)
+		}
+		touches <- struct{}{}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"lease":{"id":"cbx_123","provider":"aws","state":"active","expiresAt":"2026-05-01T00:30:00Z"}}`))
+	}))
+	defer server.Close()
+
+	client := CoordinatorClient{BaseURL: server.URL, Client: server.Client()}
+	stop := startCoordinatorHeartbeat(context.Background(), &client, "cbx_123", 30*time.Minute, nil, io.Discard)
+	defer stop()
+
+	select {
+	case <-touches:
+	case <-time.After(2 * time.Second):
+		t.Fatal("heartbeat did not touch immediately")
+	}
+}
+
 func TestCoordinatorCreateLeaseSendsAWSSSHCIDRs(t *testing.T) {
 	var body struct {
 		AWSSSHCIDRs      []string `json:"awsSSHCIDRs"`

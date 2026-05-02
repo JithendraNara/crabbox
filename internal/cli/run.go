@@ -520,6 +520,8 @@ func (a App) acquireCoordinator(ctx context.Context, cfg Config, coord *Coordina
 	}
 	server, target, leaseID := leaseToServerTarget(lease, cfg)
 	fmt.Fprintf(a.Stderr, "leased %s slug=%s server=%d type=%s ip=%s via coordinator\n", leaseID, blank(lease.Slug, "-"), server.ID, server.ServerType.Name, target.Host)
+	stopHeartbeat := startCoordinatorHeartbeat(ctx, coord, leaseID, cfg.IdleTimeout, nil, a.Stderr)
+	defer stopHeartbeat()
 	if err := waitForSSH(ctx, &target, a.Stderr); err != nil {
 		if !keep {
 			if releaseErr := releaseCoordinatorLease(context.Background(), coord, leaseID); releaseErr != nil {

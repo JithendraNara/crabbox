@@ -161,6 +161,18 @@ func TestApplyBlacksmithFlagOverrides(t *testing.T) {
 	}
 }
 
+func TestParseBlacksmithList(t *testing.T) {
+	got := parseBlacksmithList(`ID                              STATUS  REPO      WORKFLOW                                JOB    REF   CREATED
+tbx_01kqk105g69sp8kcx31h5bgn0e  ready   openclaw  .github/workflows/ci-check-testbox.yml  check  main  2026-05-02T00:22:25.000000Z
+`)
+	if len(got) != 1 {
+		t.Fatalf("items=%d want 1", len(got))
+	}
+	if got[0].ID != "tbx_01kqk105g69sp8kcx31h5bgn0e" || got[0].Workflow != ".github/workflows/ci-check-testbox.yml" || got[0].Job != "check" {
+		t.Fatalf("unexpected item: %#v", got[0])
+	}
+}
+
 func TestBlacksmithRunArgs(t *testing.T) {
 	cfg := baseConfig()
 	cfg.Blacksmith.Org = "openclaw"

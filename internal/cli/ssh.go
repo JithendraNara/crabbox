@@ -3,6 +3,8 @@ package cli
 import (
 	"bytes"
 	"context"
+	"crypto/sha1"
+	"encoding/hex"
 	"fmt"
 	"io"
 	"net"
@@ -204,14 +206,14 @@ func sshBaseArgsWithOptions(target SSHTarget, connectTimeout, connectionAttempts
 		"-i", target.Key,
 		"-o", "BatchMode=yes",
 		"-o", "StrictHostKeyChecking=accept-new",
-		"-o", "UserKnownHostsFile=" + knownHostsFile(target),
+		"-o", "UserKnownHostsFile=" + sshConfigFileValue(knownHostsFile(target)),
 		"-o", "ConnectTimeout=" + connectTimeout,
 		"-o", "ConnectionAttempts=" + connectionAttempts,
 		"-o", "ServerAliveInterval=15",
 		"-o", "ServerAliveCountMax=2",
 		"-o", "ControlMaster=auto",
 		"-o", "ControlPersist=60s",
-		"-o", "ControlPath=" + sshControlPath(),
+		"-o", "ControlPath=" + sshControlPath(target),
 		"-p", target.Port,
 	}
 }
@@ -230,8 +232,20 @@ func knownHostsFile(target SSHTarget) string {
 	return filepath.Join(os.Getenv("HOME"), ".ssh", "known_hosts")
 }
 
-func sshControlPath() string {
-	return filepath.Join("/tmp", "crabbox-ssh-%C")
+func sshConfigFileValue(path string) string {
+	if strings.ContainsAny(path, " \t\"'") {
+		return strconv.Quote(path)
+	}
+	return path
+}
+
+func sshControlPath(target SSHTarget) string {
+	scope := target.Key
+	if scope == "" {
+		scope = target.User
+	}
+	sum := sha1.Sum([]byte(scope))
+	return filepath.Join("/tmp", "crabbox-ssh-"+hex.EncodeToString(sum[:4])+"-%C")
 }
 
 type rsyncOptions struct {

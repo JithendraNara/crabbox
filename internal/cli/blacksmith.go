@@ -3,6 +3,7 @@ package cli
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"io"
@@ -35,6 +36,16 @@ type blacksmithFlagValues struct {
 	Workflow *string
 	Job      *string
 	Ref      *string
+}
+
+type blacksmithListItem struct {
+	ID       string `json:"id"`
+	Status   string `json:"status"`
+	Repo     string `json:"repo"`
+	Workflow string `json:"workflow"`
+	Job      string `json:"job"`
+	Ref      string `json:"ref"`
+	Created  string `json:"created"`
 }
 
 func isBlacksmithProvider(provider string) bool {
@@ -129,10 +140,16 @@ func (a App) blacksmithRun(ctx context.Context, cfg Config, repo Repo, opts blac
 }
 
 func (a App) blacksmithList(ctx context.Context, cfg Config, jsonOut bool) error {
-	if jsonOut {
-		return exit(2, "blacksmith-testbox list does not support --json")
+	args := blacksmithListArgs(cfg)
+	if !jsonOut {
+		return a.streamBlacksmith(ctx, args)
 	}
-	return a.streamBlacksmith(ctx, blacksmithListArgs(cfg))
+	cmd := blacksmithCommandContext(ctx, "blacksmith", args...)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return ExitError{Code: exitCode(err), Message: fmt.Sprintf("blacksmith failed: %v: %s", err, strings.TrimSpace(string(out)))}
+	}
+	return json.NewEncoder(a.Stdout).Encode(parseBlacksmithList(string(out)))
 }
 
 func (a App) blacksmithStatus(ctx context.Context, cfg Config, id string, wait bool, waitTimeout time.Duration, jsonOut bool) error {
@@ -280,6 +297,26 @@ func blacksmithStopArgs(cfg Config, leaseID string) []string {
 func blacksmithListArgs(cfg Config) []string {
 	args := blacksmithBaseArgs(cfg)
 	return append(args, "testbox", "list")
+}
+
+func parseBlacksmithList(output string) []blacksmithListItem {
+	var items []blacksmithListItem
+	for _, line := range strings.Split(output, "\n") {
+		fields := strings.Fields(line)
+		if len(fields) < 7 || fields[0] == "ID" {
+			continue
+		}
+		items = append(items, blacksmithListItem{
+			ID:       fields[0],
+			Status:   fields[1],
+			Repo:     fields[2],
+			Workflow: fields[3],
+			Job:      fields[4],
+			Ref:      fields[5],
+			Created:  fields[6],
+		})
+	}
+	return items
 }
 
 func blacksmithBaseArgs(cfg Config) []string {

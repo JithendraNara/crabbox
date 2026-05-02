@@ -12,6 +12,7 @@ Crabbox 0.3.0 adds the first trusted-operator image lifecycle for AWS runners: o
 - Added coordinator image routes for admin-token callers: `POST /v1/images`, `GET /v1/images/{ami-id}`, and `POST /v1/images/{ami-id}/promote`.
 - Added AWS provider support for `CreateImage` and `DescribeImages`, with Crabbox-owned AMI tags.
 - Added `docs/commands/image.md` and linked the image command from the CLI docs, command index, docs site, and source map.
+- Added `scripts/live-smoke.sh` for opt-in AWS, Hetzner, and Blacksmith Testbox live smoke coverage from a real repository checkout.
 
 ### Changed
 
@@ -23,6 +24,10 @@ Crabbox 0.3.0 adds the first trusted-operator image lifecycle for AWS runners: o
 
 - Fixed responsive padding on the generated docs-site frontpage body content.
 - Fixed brokered AWS security-group creation by sending EC2's required `GroupDescription` parameter, restoring first-run AWS provisioning in fresh accounts.
+- Fixed coordinator warmup waits to keep touching the lease during slow bootstrap so short idle timeouts do not release a box while the foreground CLI is still waiting.
+- Fixed SSH known-host handling for macOS config paths containing spaces, restoring per-lease known-host isolation under `Library/Application Support`.
+- Scoped SSH ControlMaster sockets by per-lease key path so fast IP reuse across ephemeral machines cannot inherit a stale control connection.
+- Fixed `crabbox list --provider blacksmith-testbox --json` to return parsed JSON instead of rejecting the shared `--json` flag.
 
 ## 0.2.0 - 2026-05-01
 
