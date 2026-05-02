@@ -113,6 +113,18 @@ https://crabbox-access.openclaw.ai
 
 The `crabbox.openclaw.ai/*` route is attached to the coordinator Worker for normal CLI and browser-login use. `crabbox-access.openclaw.ai/*` is attached to the same Worker behind Cloudflare Access for service-token proof and hardened automation. Bearer-token CLI automation talks to the Worker with `CRABBOX_SHARED_TOKEN`/`CRABBOX_COORDINATOR_TOKEN`; GitHub browser login stores a user-scoped signed token. Access-protected routes also require `CRABBOX_ACCESS_CLIENT_ID` plus `CRABBOX_ACCESS_CLIENT_SECRET`, or `CRABBOX_ACCESS_TOKEN` for an already minted Access JWT.
 
+Use the protected route when testing the Cloudflare Access layer:
+
+```sh
+CRABBOX_COORDINATOR=https://crabbox-access.openclaw.ai bin/crabbox doctor
+CRABBOX_COORDINATOR=https://crabbox-access.openclaw.ai bin/crabbox whoami
+CRABBOX_LIVE=1 CRABBOX_LIVE_PROVIDERS=aws CRABBOX_COORDINATOR=https://crabbox-access.openclaw.ai CRABBOX_BIN=bin/crabbox scripts/live-smoke.sh
+```
+
+`doctor` should report `access=service-token`. A raw request without Access
+headers to `https://crabbox-access.openclaw.ai/v1/health` should return a
+Cloudflare Access `403`.
+
 Use `crabbox config show` to confirm which URL and provider the CLI will use:
 
 ```sh

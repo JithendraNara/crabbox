@@ -15,6 +15,31 @@ https://crabbox-coordinator.services-91b.workers.dev
 crabbox.clawd.bot/*
 ```
 
+## Route Model
+
+`https://crabbox.openclaw.ai` is the normal coordinator route. It is public at
+the Cloudflare edge so `crabbox login` can complete a browser-based GitHub
+OAuth flow. The Worker still requires Crabbox auth for every non-health route.
+
+`https://crabbox-access.openclaw.ai` is the same Worker behind a Cloudflare
+Access application. It exists for automation and proof that Crabbox works when
+an operator wants an outer Cloudflare gate in front of the coordinator. Requests
+to this route must pass two checks:
+
+1. Cloudflare Access accepts the service-token headers before the request
+   reaches the Worker.
+2. The Crabbox Worker accepts either the shared operator bearer token or a
+   signed Crabbox user token.
+
+That means the Access service token is not a Crabbox admin token. It only gets
+the HTTP request through Cloudflare Access. The Worker still decides what the
+caller can do.
+
+The current Access app is `Crabbox Coordinator Service Token` on
+`crabbox-access.openclaw.ai`. Its policy is `non_identity` service-token auth,
+scoped to the local Crabbox CLI service token rather than any token in the
+account.
+
 Normal users run `crabbox login`, which opens GitHub and stores a signed Crabbox user token. The coordinator needs a GitHub OAuth app with callback:
 
 ```text
@@ -56,9 +81,45 @@ X-Crabbox-Owner: <email>
 X-Crabbox-Org: <org>
 ```
 
-If the coordinator route is also protected by Cloudflare Access, the CLI can send Access credentials before the Worker receives the request. Configure `CRABBOX_ACCESS_CLIENT_ID` and `CRABBOX_ACCESS_CLIENT_SECRET` for a Cloudflare Access service token, or `CRABBOX_ACCESS_TOKEN` to forward an already minted Access JWT as `cf-access-token`. These Access credentials only satisfy Cloudflare Access; the Worker still requires the Crabbox bearer token or a signed Crabbox user token.
+If the coordinator route is also protected by Cloudflare Access, the CLI can
+send Access credentials before the Worker receives the request. Configure
+`CRABBOX_ACCESS_CLIENT_ID` and `CRABBOX_ACCESS_CLIENT_SECRET` for a Cloudflare
+Access service token, or `CRABBOX_ACCESS_TOKEN` to forward an already minted
+Access JWT as `cf-access-token`. These Access credentials only satisfy
+Cloudflare Access; the Worker still requires the Crabbox bearer token or a
+signed Crabbox user token.
 
 The live Access-protected route is `https://crabbox-access.openclaw.ai`. Its Access app is service-token-only (`non_identity`) and currently allows the local Crabbox CLI service token, so automated clients can prove both layers independently: first Cloudflare Access, then the Worker bearer or signed user token.
+
+Local config shape:
+
+```yaml
+broker:
+  url: https://crabbox.openclaw.ai
+  token: <crabbox-shared-token-or-user-token>
+  access:
+    clientId: <cloudflare-access-client-id>
+    clientSecret: <cloudflare-access-client-secret>
+provider: aws
+```
+
+Set `CRABBOX_COORDINATOR=https://crabbox-access.openclaw.ai` when you want a
+command to use the Access-protected route without changing the default public
+broker URL. `crabbox config show` reports the Access credential state as
+`access_auth=service-token` without printing secrets.
+
+Useful proof commands:
+
+```sh
+curl -i https://crabbox-access.openclaw.ai/v1/health
+CRABBOX_COORDINATOR=https://crabbox-access.openclaw.ai bin/crabbox doctor
+CRABBOX_COORDINATOR=https://crabbox-access.openclaw.ai bin/crabbox whoami
+CRABBOX_LIVE=1 CRABBOX_LIVE_PROVIDERS=aws CRABBOX_COORDINATOR=https://crabbox-access.openclaw.ai CRABBOX_BIN=bin/crabbox scripts/live-smoke.sh
+```
+
+The first command should fail at Cloudflare Access without credentials. The CLI
+commands should pass when local Access credentials and Crabbox broker auth are
+configured.
 
 Owner selection for bearer-token requests:
 

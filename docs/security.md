@@ -15,10 +15,17 @@ Assumptions:
 
 Cloudflare Access can protect custom coordinator routes. The Worker also enforces auth for every non-health route.
 
+The Access-protected coordinator route is a defense-in-depth layer, not a
+replacement for Crabbox auth. `crabbox-access.openclaw.ai` first requires
+Cloudflare Access service-token credentials at the edge. After that, the same
+Worker still requires a Crabbox signed user token or shared operator bearer
+token before lease, run, log, usage, or admin routes are allowed.
+
 MVP:
 
 - One-time PIN Access remains available for early fallback.
 - GitHub Access IdP is configured for the `openclaw` org.
+- `crabbox-access.openclaw.ai` is service-token-only and the policy is scoped to the local Crabbox CLI service token.
 - `crabbox login` opens GitHub, receives a signed user token from the coordinator, and stores it in local config.
 - Workers.dev automation can still use a shared bearer token via `crabbox login --token-stdin`.
 - The CLI sends owner/org headers only for shared-token automation; GitHub login tokens carry owner/org inside the signed token.
@@ -59,6 +66,7 @@ Rules:
 - `CRABBOX_SHARED_TOKEN` is stored as a Worker secret for trusted operator automation; local automation can use `CRABBOX_COORDINATOR_TOKEN`.
 - `CRABBOX_GITHUB_CLIENT_ID`, `CRABBOX_GITHUB_CLIENT_SECRET`, and `CRABBOX_SESSION_SECRET` are Worker secrets for browser login.
 - `CRABBOX_GITHUB_ALLOWED_ORG(S)` and `CRABBOX_GITHUB_ALLOWED_TEAMS` are Worker config values for browser-login authorization.
+- `CRABBOX_ACCESS_CLIENT_ID` and `CRABBOX_ACCESS_CLIENT_SECRET` are local Cloudflare Access service-token credentials. Store them only in user config or env, never repo config. They only satisfy Cloudflare Access; they do not authorize Crabbox actions by themselves.
 
 Project allowlist example:
 
