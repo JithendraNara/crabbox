@@ -2,7 +2,7 @@
 
 ## 0.3.0 - Unreleased
 
-Crabbox 0.3.0 adds the first trusted-operator image lifecycle for AWS runners: operators can bake a known-good lease into an AMI, wait for it to become available, and promote it as the default image for future brokered AWS leases.
+Crabbox 0.3.0 adds trusted AWS image lifecycle, stable timing JSON, durable run events, stronger coordinator auth, and hardened AWS and Blacksmith remote-validation paths.
 
 ### Added
 
@@ -14,6 +14,8 @@ Crabbox 0.3.0 adds the first trusted-operator image lifecycle for AWS runners: o
 - Added the Access-protected coordinator route `https://crabbox-access.openclaw.ai` for service-token proof and hardened automation.
 - Added separate coordinator admin-token auth so shared operator tokens no longer grant admin routes.
 - Added Cloudflare Access JWT verification before Access identity can affect bearer-token ownership.
+- Added optional GitHub team allowlisting for browser-login tokens with `CRABBOX_GITHUB_ALLOWED_TEAMS`. Thanks @stainlu.
+- Added Cloudflare Access service-token headers for coordinator CLI requests. Thanks @stainlu.
 - Added `crabbox image create --id <cbx_id> --name <ami-name> [--wait]` for trusted operators to create AWS AMIs from active brokered AWS leases.
 - Added `crabbox image promote <ami-id>` for trusted operators to promote an available AMI as the coordinator default for future brokered AWS leases.
 - Added JSON output and wait polling for image creation, including `--wait-timeout` and `--no-reboot` controls.
@@ -53,6 +55,8 @@ Crabbox 0.3.0 adds the first trusted-operator image lifecycle for AWS runners: o
 - Fixed SSH known-host handling for macOS config paths containing spaces, restoring per-lease known-host isolation under `Library/Application Support`.
 - Scoped SSH ControlMaster sockets by per-lease key path so fast IP reuse across ephemeral machines cannot inherit a stale control connection.
 - Fixed `crabbox list --provider blacksmith-testbox --json` to return parsed JSON instead of rejecting the shared `--json` flag.
+- Prevented caller-supplied Access identity headers from overriding signed GitHub user token identity. Thanks @stainlu.
+- Canceled SSH bootstrap waits when the coordinator lease disappears or becomes inactive, and made wait progress include elapsed and remaining time.
 - Documented self-hosted GitHub OAuth setup so external coordinator deployments can avoid `Invalid redirect_uri` login failures.
 
 ## 0.2.0 - 2026-05-01
@@ -65,11 +69,9 @@ Crabbox 0.2.0 hardens the brokered runner path after real AWS and Blacksmith Tes
 - Added coordinator OAuth routes for GitHub login: `/v1/auth/github/start`, `/v1/auth/github/callback`, and `/v1/auth/github/poll`.
 - Added signed non-admin user-token auth in the Worker while keeping the shared operator token for admin routes.
 - Added GitHub org membership enforcement before minting browser-login tokens.
-- Added optional GitHub team allowlisting for browser-login tokens with `CRABBOX_GITHUB_ALLOWED_TEAMS`. Thanks @stainlu.
 - Added the canonical coordinator endpoint configured for OAuth callback generation.
 - Added Blacksmith Testbox workflow flags for `crabbox warmup` and `crabbox run`, enabling one-command Testbox runs without repo YAML or environment variables.
 - Added configurable SSH fallback ports via `ssh.fallbackPorts` and `CRABBOX_SSH_FALLBACK_PORTS`.
-- Added Cloudflare Access service-token headers for coordinator CLI requests. Thanks @stainlu.
 
 ### Changed
 
@@ -88,7 +90,6 @@ Crabbox 0.2.0 hardens the brokered runner path after real AWS and Blacksmith Tes
 - Restricted Worker admin routes to shared-token admin auth so GitHub browser-login users cannot call admin endpoints.
 - Fixed `whoami` reporting for GitHub browser-login tokens.
 - Fixed exact `cbx_...` lookups bypassing owner-scoped slug authorization checks.
-- Prevented caller-supplied Access identity headers from overriding signed GitHub user token identity. Thanks @stainlu.
 - Added cleanup and a pending-login cap for unauthenticated GitHub OAuth login starts.
 
 ## 0.1.0 - 2026-05-01
