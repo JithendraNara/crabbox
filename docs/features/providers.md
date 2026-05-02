@@ -30,7 +30,7 @@ AWS behavior:
 - tags instances, volumes, and Spot requests;
 - falls back across broad C/M/R instance families for class requests, including account policy and capacity rejections;
 - can fall back to a small burstable type when account policy rejects the high-core class candidates;
-- preflights applied Spot or On-Demand vCPU quotas when Service Quotas allows it, then records skipped candidates as quota attempts;
+- preflights applied Spot or On-Demand vCPU quotas in brokered mode when Service Quotas allows it, then records skipped candidates as quota attempts;
 - supports `--market spot|on-demand` on `warmup` and `run` for one-off capacity-market overrides;
 - uses Spot placement score across configured regions in direct AWS mode;
 - can fall back to On-Demand after Spot capacity/quota failures when configured;
@@ -74,7 +74,9 @@ rm -f "$tmp"
 
 Use `--provider aws` with AWS SDK credentials for direct AWS smoke. Direct mode
 has no Durable Object alarm; cleanup is best-effort through provider labels and
-manual `crabbox cleanup`.
+manual `crabbox cleanup`. Direct AWS fallback can retry provider types, but the
+structured quota preflight and `provisioningAttempts` metadata belong to the
+brokered Worker path.
 
 Crabbox can also wrap Blacksmith Testboxes with `provider: blacksmith-testbox`. That backend does not use the Crabbox broker or direct cloud credentials. It shells out to the authenticated Blacksmith CLI for `testbox warmup`, `run`, `status`, `list`, and `stop`, while Crabbox keeps local slugs, repo claims, config, and timing summaries. See [Blacksmith Testbox](blacksmith-testbox.md).
 
