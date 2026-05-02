@@ -15,14 +15,15 @@ local checkout.
 - Prefer local targeted tests for tight edit loops.
 - Check repo-local `crabbox.yaml` or `.crabbox.yaml` before adding flags.
 - Install with `brew install openclaw/tap/crabbox`.
-- Auth is required for brokered operation:
-  `printf '%s' "$CRABBOX_COORDINATOR_TOKEN" | crabbox login --url https://crabbox-coordinator.steipete.workers.dev --provider aws --token-stdin`.
+- Auth is required for brokered operation. Normal users run `crabbox login`.
+- Trusted operator automation can store the shared token with:
+  `printf '%s' "$CRABBOX_COORDINATOR_TOKEN" | crabbox login --url https://crabbox.openclaw.ai --provider aws --token-stdin`.
 - User config lives at `~/Library/Application Support/crabbox/config.yaml` on
   macOS or the platform user config dir elsewhere. It should contain:
 
 ```yaml
 broker:
-  url: https://crabbox-coordinator.steipete.workers.dev
+  url: https://crabbox.openclaw.ai
   token: <token>
 provider: aws
 ```
@@ -67,6 +68,7 @@ crabbox results <run_id>
 crabbox cache stats --id <id-or-slug>
 crabbox ssh --id <id-or-slug>
 crabbox usage --scope org
+CRABBOX_LIVE=1 CRABBOX_LIVE_REPO=/path/to/openclaw scripts/live-smoke.sh
 ```
 
 Use `--debug` on `run` when measuring sync timing.

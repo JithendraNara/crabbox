@@ -34,10 +34,11 @@ CRABBOX_DEFAULT_ORG
 
 Identity for usage:
 
-- Cloudflare Access email wins when present;
-- bearer-token CLI requests send `X-Crabbox-Owner`;
+- signed GitHub login tokens carry owner/org identity;
+- shared bearer-token CLI requests send `X-Crabbox-Owner`;
 - `X-Crabbox-Owner` comes from `CRABBOX_OWNER`, Git email env, or `git config user.email`;
 - `CRABBOX_ORG` sends `X-Crabbox-Org`.
+- Access-protected fallback routes can override shared-token owner headers with the forwarded Cloudflare Access email.
 
 `estimatedUSD` is elapsed runtime cost. `reservedUSD` is TTL worst-case cost reserved before provisioning. Provider extras such as static IP charges, egress, snapshots, taxes, credits, and discounts are not fully modeled.
 

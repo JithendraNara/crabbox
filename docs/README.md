@@ -43,7 +43,7 @@ Verify with `crabbox --version`.
 ## Quick start
 
 ```sh
-# log in once per machine - stores a bearer token in the OS keychain
+# log in once per machine - stores a broker token in user config
 crabbox login
 
 # one-shot run on a fresh leased box
@@ -86,6 +86,6 @@ Markdown in this directory is the user-facing documentation source. Implementati
 Build the docs site locally:
 
 ```sh
-node scripts/build-docs-site.mjs
+npm run docs:check
 open dist/docs-site/index.html
 ```

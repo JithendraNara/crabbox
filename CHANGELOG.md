@@ -6,12 +6,14 @@ Crabbox 0.3.0 adds the first trusted-operator image lifecycle for AWS runners: o
 
 ### Added
 
+- Added the Access-protected coordinator route `https://crabbox-access.openclaw.ai` for service-token proof and hardened automation.
 - Added `crabbox image create --id <cbx_id> --name <ami-name> [--wait]` for trusted operators to create AWS AMIs from active brokered AWS leases.
 - Added `crabbox image promote <ami-id>` for trusted operators to promote an available AMI as the coordinator default for future brokered AWS leases.
 - Added JSON output and wait polling for image creation, including `--wait-timeout` and `--no-reboot` controls.
 - Added coordinator image routes for admin-token callers: `POST /v1/images`, `GET /v1/images/{ami-id}`, and `POST /v1/images/{ami-id}/promote`.
 - Added AWS provider support for `CreateImage` and `DescribeImages`, with Crabbox-owned AMI tags.
 - Added `docs/commands/image.md` and linked the image command from the CLI docs, command index, docs site, and source map.
+- Added `npm run docs:check` with internal Markdown link validation plus docs-site generation, and wired it into CI.
 - Added `scripts/live-smoke.sh` for opt-in AWS, Hetzner, and Blacksmith Testbox live smoke coverage from a real repository checkout.
 
 ### Changed

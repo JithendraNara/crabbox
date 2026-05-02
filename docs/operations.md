@@ -23,15 +23,42 @@ Run these before a release or after changing secrets:
 go test ./...
 npm run check --prefix worker
 npm test --prefix worker
-node scripts/build-docs-site.mjs
+npm run docs:check
 bin/crabbox doctor
 bin/crabbox whoami
-bin/crabbox status --json
+bin/crabbox list --json
 bin/crabbox usage --scope all --json
 bin/crabbox history --limit 5
 ```
 
-`crabbox doctor` checks local prerequisites and coordinator reachability. `crabbox whoami` verifies identity. `crabbox status` confirms the broker can answer lease state. `crabbox usage` proves the cost accounting path is reachable. `crabbox history` proves run history is reachable.
+`crabbox doctor` checks local prerequisites and coordinator reachability. `crabbox whoami` verifies identity. `crabbox list` confirms the broker can answer lease state. `crabbox usage` proves the cost accounting path is reachable. `crabbox history` proves run history is reachable.
+
+When broker/provider credentials are available and infra changed, run the live smoke:
+
+```sh
+CRABBOX_LIVE=1 CRABBOX_LIVE_REPO=/path/to/openclaw scripts/live-smoke.sh
+```
+
+To narrow the live matrix while debugging, set `CRABBOX_LIVE_PROVIDERS`:
+
+```sh
+CRABBOX_LIVE=1 CRABBOX_LIVE_PROVIDERS=aws CRABBOX_LIVE_REPO=/path/to/openclaw scripts/live-smoke.sh
+CRABBOX_LIVE=1 CRABBOX_LIVE_PROVIDERS=hetzner CRABBOX_LIVE_REPO=/path/to/openclaw scripts/live-smoke.sh
+CRABBOX_LIVE=1 CRABBOX_LIVE_PROVIDERS=blacksmith-testbox CRABBOX_LIVE_REPO=/path/to/openclaw scripts/live-smoke.sh
+```
+
+For direct-provider smoke, disable the coordinator with a scratch config and run the same commands manually:
+
+```sh
+tmp="$(mktemp)"
+printf 'provider: hetzner\n' > "$tmp"
+CRABBOX_CONFIG="$tmp" CRABBOX_COORDINATOR= bin/crabbox warmup --provider hetzner --class standard --ttl 15m --idle-timeout 4m
+CRABBOX_CONFIG="$tmp" CRABBOX_COORDINATOR= bin/crabbox run --provider hetzner --id <slug> --no-sync -- echo direct-hetzner-ok
+CRABBOX_CONFIG="$tmp" CRABBOX_COORDINATOR= bin/crabbox stop --provider hetzner <slug>
+rm -f "$tmp"
+```
+
+Use `--provider aws` with AWS SDK credentials for the direct AWS equivalent.
 
 ## Deployment
 
@@ -78,7 +105,13 @@ The canonical Worker URL is:
 https://crabbox.openclaw.ai
 ```
 
-The `crabbox.openclaw.ai/*` route is attached to the coordinator Worker. Bearer-token CLI automation talks to the Worker with `CRABBOX_SHARED_TOKEN`/`CRABBOX_COORDINATOR_TOKEN`; GitHub browser login stores a user-scoped signed token. Access-protected fallback routes can also use `CRABBOX_ACCESS_CLIENT_ID` plus `CRABBOX_ACCESS_CLIENT_SECRET`, or `CRABBOX_ACCESS_TOKEN` for an already minted Access JWT.
+The Access-protected Worker URL is:
+
+```text
+https://crabbox-access.openclaw.ai
+```
+
+The `crabbox.openclaw.ai/*` route is attached to the coordinator Worker for normal CLI and browser-login use. `crabbox-access.openclaw.ai/*` is attached to the same Worker behind Cloudflare Access for service-token proof and hardened automation. Bearer-token CLI automation talks to the Worker with `CRABBOX_SHARED_TOKEN`/`CRABBOX_COORDINATOR_TOKEN`; GitHub browser login stores a user-scoped signed token. Access-protected routes also require `CRABBOX_ACCESS_CLIENT_ID` plus `CRABBOX_ACCESS_CLIENT_SECRET`, or `CRABBOX_ACCESS_TOKEN` for an already minted Access JWT.
 
 Use `crabbox config show` to confirm which URL and provider the CLI will use:
 
@@ -129,7 +162,6 @@ Before handing off:
 
 - `go test ./...`
 - Worker format, lint, typecheck, tests, and build.
-- `node scripts/build-docs-site.mjs`
-- docs link check, when a link checker is available.
+- `npm run docs:check`
 - `git diff --check`
 - live `crabbox doctor` if broker credentials are available.

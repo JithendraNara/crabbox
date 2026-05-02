@@ -11,9 +11,11 @@ Crabbox creates a fresh SSH key per lease by default. This avoids sharing a long
 Local key storage is under the Crabbox user config directory, outside the repository:
 
 ```text
-macOS: ~/Library/Application Support/crabbox/keys/<lease>/
-Linux: ~/.config/crabbox/keys/<lease>/
+macOS: ~/Library/Application Support/crabbox/testboxes/<lease>/id_ed25519
+Linux: ~/.config/crabbox/testboxes/<lease>/id_ed25519
 ```
+
+A per-lease `known_hosts` file lives beside the key. SSH ControlMaster sockets are also scoped to the key path, so reused provider IPs do not poison the user's global `~/.ssh/known_hosts` and do not cross streams between leases.
 
 The CLI sends only the public key to the coordinator. The Worker imports or reuses that public key in the provider:
 

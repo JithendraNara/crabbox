@@ -11,7 +11,7 @@ crabbox list --json
 
 `crabbox pool list` remains as a compatibility alias.
 
-In `blacksmith-testbox` mode this forwards to `blacksmith testbox list`. JSON output is not supported because the Blacksmith CLI owns the list formatting.
+In `blacksmith-testbox` mode this forwards to `blacksmith testbox list`. Human output preserves the Blacksmith table; `--json` emits Crabbox-parsed rows with id, status, repo, workflow, job, ref, and created time when the upstream table exposes those columns.
 
 Flags:
 

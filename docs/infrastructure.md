@@ -8,6 +8,12 @@ Canonical Worker endpoint:
 https://crabbox.openclaw.ai
 ```
 
+Access-protected Worker endpoint:
+
+```text
+https://crabbox-access.openclaw.ai
+```
+
 Legacy fallback route:
 
 ```text
@@ -17,10 +23,10 @@ https://crabbox.clawd.bot
 Workers.dev fallback endpoint:
 
 ```text
-https://crabbox-coordinator.steipete.workers.dev
+https://crabbox-coordinator.services-91b.workers.dev
 ```
 
-The `crabbox.openclaw.ai/*` Worker route is the stable automation and browser-login endpoint. `crabbox.clawd.bot/*` and the workers.dev URL remain fallback routes.
+The `crabbox.openclaw.ai/*` Worker route is the stable automation and browser-login endpoint. `crabbox-access.openclaw.ai/*` is the Cloudflare Access-protected route for service-token proof and hardened automation. `crabbox.clawd.bot/*` and the workers.dev URL remain fallback routes.
 
 ## Cloudflare
 
@@ -34,13 +40,13 @@ Use Cloudflare for:
 
 Known setup:
 
-- Access org: `openclaw-crabbox.cloudflareaccess.com`.
+- Access org: `crabbox-openclaw.cloudflareaccess.com`.
 - Access enabled.
 - Current IdPs: one-time PIN and GitHub.
 - GitHub IdP name: `GitHub OpenClaw`.
 - GitHub IdP restriction: org `openclaw`.
-- Fallback Access app: `Crabbox Coordinator` on `crabbox.clawd.bot`.
-- Fallback Access policy readback verifies the GitHub org include rule for `openclaw`.
+- Service-token Access app: `Crabbox Coordinator Service Token` on `crabbox-access.openclaw.ai`.
+- Service-token Access policy: `CLI service token`, `non_identity`, include the local Crabbox CLI service token.
 
 Required env:
 
@@ -85,22 +91,22 @@ Current local status:
 - The GitHub OAuth client ID and secret may be stored locally as `CRABBOX_GITHUB_OAUTH_*` and deployed to the Worker as `CRABBOX_GITHUB_CLIENT_*`.
 - Cloudflare Access service-token CLI credentials can be stored locally as `CRABBOX_ACCESS_CLIENT_ID` and `CRABBOX_ACCESS_CLIENT_SECRET`; `CRABBOX_ACCESS_TOKEN` can carry an already minted Access JWT for protected fallback routes.
 - Crabbox browser-login OAuth secrets are deployed as Worker secrets `CRABBOX_GITHUB_CLIENT_ID`, `CRABBOX_GITHUB_CLIENT_SECRET`, and `CRABBOX_SESSION_SECRET`.
-- Worker route is attached for `crabbox.openclaw.ai/*`.
+- Worker routes are attached for `crabbox.openclaw.ai/*` and `crabbox-access.openclaw.ai/*`.
 - `CRABBOX_COORDINATOR`, `CRABBOX_PROFILE`, `CRABBOX_CONFIG`, `CRABBOX_FLEET_CONFIG`, `CRABBOX_SSH_KEY`, `CRABBOX_NO_COLOR`, and `CRABBOX_LOG` are optional CLI defaults and are not required to build the MVP.
 
-The Cloudflare token `crabbox-deploy` is scoped to `Steipete@gmail.com's Account` and the Crabbox zones. It verifies access to Workers scripts, Access applications, Access identity providers, Access keys, DNS records, and zone Worker routes from both the local machine and MacBook Pro.
+The Cloudflare token `crabbox-deploy` is scoped to the OpenClaw Cloudflare account and the Crabbox/OpenClaw routes it manages. It verifies access to Workers scripts, Access applications, Access identity providers, Access keys, DNS records, and zone Worker routes from both the local machine and MacBook Pro.
 
-## DNS Decision
+## DNS State
 
-Preferred path:
+Current path:
 
-1. Keep `openclaw.ai` in Cloudflare.
-2. Add proxied DNS for `crabbox.openclaw.ai`.
-3. Deploy Worker route `crabbox.openclaw.ai/*`.
+1. Keep the main `openclaw.ai` website on Vercel.
+2. Manage `crabbox.openclaw.ai` in the OpenClaw Cloudflare account.
+3. Proxy `crabbox.openclaw.ai/*` and `crabbox-access.openclaw.ai/*` to the `crabbox-coordinator` Worker.
 4. Set `CRABBOX_PUBLIC_URL=https://crabbox.openclaw.ai`.
 5. Configure the GitHub OAuth callback on `https://crabbox.openclaw.ai/v1/auth/github/callback`.
 
-Temporary path:
+Fallback path:
 
 1. Use the workers.dev URL for health checks if DNS is disrupted.
 2. Use `crabbox.clawd.bot` only as a legacy fallback.
@@ -272,11 +278,12 @@ Current deployed coordinator:
 
 ```text
 https://crabbox.openclaw.ai
-https://crabbox-coordinator.steipete.workers.dev
+https://crabbox-access.openclaw.ai
+https://crabbox-coordinator.services-91b.workers.dev
 crabbox.clawd.bot/* -> crabbox-coordinator fallback
 ```
 
-Current Worker secrets:
+Current Worker secrets and settings:
 
 ```text
 HETZNER_TOKEN
@@ -284,11 +291,18 @@ AWS_ACCESS_KEY_ID
 AWS_SECRET_ACCESS_KEY
 AWS_SESSION_TOKEN optional
 CRABBOX_SHARED_TOKEN
+CRABBOX_GITHUB_CLIENT_ID
+CRABBOX_GITHUB_CLIENT_SECRET
+CRABBOX_GITHUB_ALLOWED_ORG
+CRABBOX_GITHUB_ALLOWED_ORGS optional
+CRABBOX_GITHUB_ALLOWED_TEAMS optional
+CRABBOX_DEFAULT_ORG
+CRABBOX_SESSION_SECRET
 ```
 
 ## Verified OpenClaw Run
 
-Warm-run command from `/Users/steipete/Projects/openclaw` through the Cloudflare coordinator:
+Historical warm-run command from an OpenClaw checkout through the Cloudflare coordinator:
 
 ```sh
 CI=1 /usr/bin/time -p /Users/steipete/Projects/crabbox/bin/crabbox run --id cbx_f60f47cbc879 -- pnpm test:changed:max
@@ -300,6 +314,14 @@ Result:
 - End-to-end warm wall time: 93.66 seconds.
 - Runner class: requested `beast`, actual fallback `cpx62`.
 - Sync path: rsync overlay plus remote Git hydrate for shallow checkout merge-base support.
+
+Current live smoke command:
+
+```sh
+CRABBOX_LIVE=1 CRABBOX_LIVE_REPO=/Users/steipete/Projects/clawdbot6 /Users/steipete/Projects/crabbox/scripts/live-smoke.sh
+```
+
+The smoke covers brokered AWS, direct Hetzner, Blacksmith Testbox delegation, slug reuse, status/inspect/cache/history/logs, stop, and final active-lease cleanup checks.
 
 ## Local, MacBook Pro, And Mac Studio
 

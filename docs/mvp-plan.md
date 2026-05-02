@@ -127,7 +127,7 @@ Build in this order:
 
 9. Access/auth
    - Primary org: GitHub `openclaw`.
-   - Cloudflare Access org: `openclaw-crabbox.cloudflareaccess.com`.
+- Cloudflare Access org: `crabbox-openclaw.cloudflareaccess.com`.
    - Cloudflare OTP remains available for early fallback.
    - GitHub OAuth app exists under the `openclaw` org as `Crabbox Access`.
    - GitHub IdP exists in Cloudflare Access as `GitHub OpenClaw`.
@@ -172,12 +172,14 @@ And proves:
 ## Known Current Infra Facts
 
 - Direct CLI execution is implemented and verified. It can create/reuse a Hetzner server, bootstrap it, sync a local checkout with rsync, hydrate shallow Git history enough for changed-test detection, run commands over SSH, stream output, and release/delete leases.
-- The Cloudflare coordinator and Durable Object lease store are implemented and deployed. The CLI uses them when `CRABBOX_COORDINATOR` is set, and falls back to direct Hetzner otherwise.
-- Intended primary domain: `crabbox.openclaw.ai`.
+- The Cloudflare coordinator and Durable Object lease store are implemented and deployed. The CLI uses them when a broker URL is configured, and direct provider mode remains a debug fallback.
+- Primary domain: `crabbox.openclaw.ai`.
+- Access-protected service-token domain: `crabbox-access.openclaw.ai`.
 - Current Cloudflare-manageable fallback domain: `crabbox.clawd.bot`.
-- `openclaw.ai` must be visible as a Cloudflare zone before `crabbox.openclaw.ai/*` can be attached as a Worker route. Current public DNS is on Namecheap nameservers.
+- Workers.dev fallback: `https://crabbox-coordinator.services-91b.workers.dev`.
+- `crabbox.openclaw.ai/*` is attached as a Worker route in the OpenClaw Cloudflare account. The main `openclaw.ai` website can stay on Vercel; only the Crabbox subdomain needs to route to Cloudflare/Workers.
 - Cloudflare account ID and Crabbox Cloudflare token are available in local and MacBook Pro `~/.profile`.
-- The current Crabbox Cloudflare token is `crabbox-deploy`, scoped to `Steipete@gmail.com's Account` and the `clawd.bot` zone.
+- The current Crabbox Cloudflare token is `crabbox-deploy`, scoped to the OpenClaw Cloudflare account and the routes/zones Crabbox manages.
 - The current Crabbox Cloudflare token verifies Workers scripts, Access apps, Access IdPs, Access keys, DNS records, and zone Worker routes.
 - Cloudflare Access is enabled.
 - Current Access IdPs are OTP and GitHub.
@@ -185,7 +187,7 @@ And proves:
 - Crabbox browser login uses a GitHub OAuth callback at `/v1/auth/github/callback` and stores OAuth client values as Worker secrets.
 - Cloudflare Access GitHub IdP `GitHub OpenClaw` exists.
 - Cloudflare Access app `Crabbox Coordinator` exists for `crabbox.clawd.bot`.
-- Worker `crabbox-coordinator` is deployed at `https://crabbox-coordinator.steipete.workers.dev` and routed from `crabbox.clawd.bot/*`. The canonical target is `https://crabbox.openclaw.ai` once the Cloudflare zone is delegated.
+- Worker `crabbox-coordinator` is deployed at `https://crabbox-coordinator.services-91b.workers.dev`, routed from `crabbox.openclaw.ai/*` and `crabbox-access.openclaw.ai/*`, and optionally reachable through fallback routes.
 - Coordinator auth supports GitHub browser-login user tokens plus shared-token operator automation. Shared-token auth uses `CRABBOX_COORDINATOR_TOKEN` locally and `CRABBOX_SHARED_TOKEN` in the Worker.
 - Hetzner token is available in local and Mac Studio `~/.profile`.
 - The Hetzner account currently hits a dedicated-core quota/resource limit for `ccx63`, `ccx53`, and `ccx43`. The `beast` class falls back to `cpx62` until quota is raised.
@@ -197,9 +199,7 @@ And proves:
 ## Next Implementation Milestones
 
 1. Raise Hetzner dedicated-core quota so `beast` can use `ccx63` instead of falling back to `cpx62`.
-2. Add GitHub org/team allowlisting for browser-login user tokens.
-3. Delegate `openclaw.ai` to Cloudflare or provide a token that can create/manage that zone, then attach `crabbox.openclaw.ai/*`.
-4. Add Cloudflare Access service-token support for non-browser CLI use on fallback routes.
-5. Add one-shot `run --profile` cleanup semantics coverage in integration tests.
-6. Add coordinator drain controls beyond release/delete.
-7. Re-run OpenClaw `pnpm test:changed:max` on `ccx63` and compare against the current Crabbox baseline.
+2. Add one-shot `run --profile` cleanup semantics coverage in integration tests.
+3. Add coordinator drain controls beyond release/delete.
+4. Re-run OpenClaw `pnpm test:changed:max` on `ccx63` and compare against the current Crabbox baseline after quota is raised.
+5. Add generated CLI docs or a docs drift check so command pages cannot silently diverge from actual flags.

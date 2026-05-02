@@ -13,7 +13,7 @@ Start with:
 ```sh
 bin/crabbox doctor
 bin/crabbox config show
-bin/crabbox status --json
+bin/crabbox list --json
 bin/crabbox usage --scope all --json
 ```
 
@@ -43,6 +43,27 @@ Fixes:
 - ensure `CRABBOX_COORDINATOR_TOKEN` matches the Worker `CRABBOX_SHARED_TOKEN`.
 - for self-hosted GitHub browser login, create your own GitHub OAuth app and set its callback URL to `https://<your-coordinator-host>/v1/auth/github/callback`;
 - ensure the Worker's `CRABBOX_PUBLIC_URL` uses the same public origin as that GitHub OAuth callback.
+
+## SSH Host Key Or Control Socket Fails
+
+Symptoms:
+
+- SSH warns that host identification changed after a provider reused an IP;
+- a reused warm lease connects to the wrong ControlMaster socket;
+- paths under `~/Library/Application Support` appear split at the space.
+
+Checks:
+
+```sh
+bin/crabbox inspect --id blue-lobster --json
+bin/crabbox ssh --id blue-lobster
+```
+
+Fixes:
+
+- upgrade to a build that quotes SSH config values with spaces;
+- keep per-lease keys under the Crabbox config `testboxes/<lease>` directory;
+- avoid manually overriding `UserKnownHostsFile` or `ControlPath` unless debugging SSH itself.
 
 ## Lease Rejected By Cost Control
 
@@ -194,7 +215,7 @@ Symptoms:
 Checks:
 
 ```sh
-node scripts/build-docs-site.mjs
+npm run docs:check
 gh run list --workflow pages.yml
 ```
 
@@ -203,3 +224,4 @@ Fixes:
 - enable GitHub Pages for the repository or organization;
 - rerun the Pages workflow after Pages is allowed;
 - keep Markdown links relative so the static builder can rewrite them.
+- fix broken internal Markdown links before checking whether Pages itself is down.

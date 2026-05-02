@@ -94,7 +94,7 @@ Direct mode needs local provider credentials (AWS SDK chain or `HCLOUD_TOKEN`). 
 
 ## Auth And Identity
 
-The broker accepts bearer-token automation and can also use Cloudflare Access identity when present. Bearer-token CLI requests send:
+The broker accepts signed GitHub login tokens for normal users and shared bearer tokens for trusted automation. Fallback routes can also sit behind Cloudflare Access before the Worker sees the request. Bearer-token CLI requests send:
 
 ```text
 Authorization: Bearer <token>
@@ -102,7 +102,7 @@ X-Crabbox-Owner: <email>
 X-Crabbox-Org: <org>
 ```
 
-Owner is resolved from `CRABBOX_OWNER`, the Git email env, or `git config user.email`. `CRABBOX_ORG` sets the org. Cloudflare Access email wins when both are present.
+Owner is resolved from the signed GitHub token for `crabbox login` users. In shared-token mode, owner comes from `CRABBOX_OWNER`, the Git email env, or `git config user.email`; `CRABBOX_ORG` sets the org. If a fallback route forwards Cloudflare Access identity, that Access email wins over shared-token owner headers.
 
 ## Sync Model
 

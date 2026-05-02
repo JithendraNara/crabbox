@@ -26,7 +26,7 @@ Prerequisites on the laptop: `git`, `ssh`, `ssh-keygen`, `rsync`, `curl`.
 ## Quick start
 
 ```sh
-# log in once per machine (stores a bearer token in the OS keychain)
+# log in once per machine (stores a broker token in user config)
 crabbox login
 
 # verify local prerequisites and broker reachability
@@ -155,9 +155,15 @@ scripts/check-go-coverage.sh 85.0
 npm ci --prefix worker
 npm test --prefix worker
 npm run build --prefix worker
+
+# Docs
+npm run docs:check
+
+# Optional live smoke, when broker/provider credentials are available
+CRABBOX_LIVE=1 CRABBOX_LIVE_REPO=/path/to/openclaw scripts/live-smoke.sh
 ```
 
-CI runs the full gate (gofmt, vet, race tests, coverage threshold, GoReleaser snapshot, Worker lint/typecheck/tests/build) on every push and PR. Tagged pushes matching `v*` publish Go archives via GoReleaser and bump the Homebrew formula at [openclaw/homebrew-tap](https://github.com/openclaw/homebrew-tap).
+CI runs the full gate (gofmt, vet, race tests, coverage threshold, docs link/build check, GoReleaser snapshot, Worker lint/typecheck/tests/build) on every push and PR. Tagged pushes matching `v*` publish Go archives via GoReleaser and bump the Homebrew formula at [openclaw/homebrew-tap](https://github.com/openclaw/homebrew-tap).
 
 Worker deployment, required secrets, and DNS routing live in [docs/infrastructure.md](docs/infrastructure.md).
 
@@ -172,7 +178,7 @@ Worker deployment, required secrets, and DNS routing live in [docs/infrastructur
 The GitHub Pages site at <https://openclaw.github.io/crabbox/> is generated from the `docs/` Markdown:
 
 ```sh
-node scripts/build-docs-site.mjs
+npm run docs:check
 open dist/docs-site/index.html
 ```
 

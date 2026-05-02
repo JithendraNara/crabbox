@@ -11,10 +11,10 @@ Crabbox supports GitHub browser login for normal users and shared bearer-token l
 Identity sent to the coordinator:
 
 ```text
-Cloudflare Access email, when present
 signed GitHub login token from browser auth
 X-Crabbox-Owner from CRABBOX_OWNER, Git email env, or git config user.email
 X-Crabbox-Org from CRABBOX_ORG
+Cloudflare Access email, when forwarded by a protected fallback route
 CRABBOX_DEFAULT_ORG fallback in the Worker
 ```
 

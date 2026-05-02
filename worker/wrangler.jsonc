@@ -16,6 +16,10 @@
       "pattern": "crabbox.openclaw.ai/*",
       "zone_name": "openclaw.ai",
     },
+    {
+      "pattern": "crabbox-access.openclaw.ai/*",
+      "zone_name": "openclaw.ai",
+    },
   ],
   "durable_objects": {
     "bindings": [

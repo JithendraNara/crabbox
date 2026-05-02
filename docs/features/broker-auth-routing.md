@@ -10,7 +10,8 @@ The broker is exposed through Cloudflare Workers routes:
 
 ```text
 https://crabbox.openclaw.ai
-https://crabbox-coordinator.steipete.workers.dev
+https://crabbox-access.openclaw.ai
+https://crabbox-coordinator.services-91b.workers.dev
 crabbox.clawd.bot/*
 ```
 
@@ -57,6 +58,8 @@ X-Crabbox-Org: <org>
 
 If the coordinator route is also protected by Cloudflare Access, the CLI can send Access credentials before the Worker receives the request. Configure `CRABBOX_ACCESS_CLIENT_ID` and `CRABBOX_ACCESS_CLIENT_SECRET` for a Cloudflare Access service token, or `CRABBOX_ACCESS_TOKEN` to forward an already minted Access JWT as `cf-access-token`. These Access credentials only satisfy Cloudflare Access; the Worker still requires the Crabbox bearer token or a signed Crabbox user token.
 
+The live Access-protected route is `https://crabbox-access.openclaw.ai`. Its Access app is service-token-only (`non_identity`) and currently allows the local Crabbox CLI service token, so automated clients can prove both layers independently: first Cloudflare Access, then the Worker bearer or signed user token.
+
 Owner selection for bearer-token requests:
 
 ```text
@@ -66,9 +69,9 @@ GIT_COMMITTER_EMAIL
 git config user.email
 ```
 
-`CRABBOX_ORG` sets the org header. When Cloudflare Access identity is present, Access email wins over the CLI-provided owner.
+`CRABBOX_ORG` sets the org header. When a request comes through Cloudflare Access and Access identity is forwarded, that Access email wins over the CLI-provided owner. Normal `crabbox login` requests use the signed GitHub token identity.
 
-GitHub user tokens are signed by the Worker and are not admin tokens. Admin routes require the shared operator token. The `crabbox.openclaw.ai/*` route is the canonical CLI and browser-login endpoint. The worker.dev and `crabbox.clawd.bot/*` routes are fallbacks.
+GitHub user tokens are signed by the Worker and are not admin tokens. Admin routes require the shared operator token. The `crabbox.openclaw.ai/*` route is the canonical CLI and browser-login endpoint. `crabbox-access.openclaw.ai/*` is the service-token-protected endpoint. `https://crabbox-coordinator.services-91b.workers.dev` and `crabbox.clawd.bot/*` are fallbacks.
 
 Related docs:
 

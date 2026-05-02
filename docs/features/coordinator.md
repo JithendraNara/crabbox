@@ -10,7 +10,7 @@ The coordinator is the Cloudflare Worker plus Fleet Durable Object. Normal Crabb
 
 Responsibilities:
 
-- authenticate broker requests with the shared token and Cloudflare Access context when present;
+- authenticate broker requests with signed GitHub user tokens or the shared operator token, with optional Cloudflare Access context on protected fallback routes;
 - serialize fleet state in one Durable Object;
 - create, heartbeat, release, expire, and look up leases;
 - own provider credentials;

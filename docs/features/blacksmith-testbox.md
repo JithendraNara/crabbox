@@ -82,6 +82,11 @@ blacksmith testbox stop --id <tbx_id>
 
 The wrapper is deliberately thin. If Blacksmith adds behavior to those commands, Crabbox should prefer forwarding rather than reimplementing it.
 
+`crabbox list --provider blacksmith-testbox --json` parses the Blacksmith table
+output into JSON rows with the fields Crabbox can see. That parser is a
+compatibility layer, not a Blacksmith API contract. If the Blacksmith CLI adds
+native JSON output, Crabbox should switch to that and drop table parsing.
+
 ## Auth
 
 Auth stays with Blacksmith. Run `blacksmith auth login` before using this provider. Crabbox does not call the Crabbox login broker, does not send work to the Cloudflare coordinator, and does not hold Blacksmith credentials.

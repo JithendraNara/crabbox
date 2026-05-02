@@ -47,6 +47,7 @@ Bootstrap is intentionally tiny: OpenSSH, CA certificates, curl, Git, rsync, jq,
 - Git manifest, rsync plan, fingerprints, guardrails: `internal/cli/repo.go`
 - Sync plan command: `internal/cli/sync_plan.go`
 - SSH command output and direct SSH touch behavior: `internal/cli/ssh.go`, `internal/cli/ssh_cmd.go`
+- Per-lease SSH known_hosts and ControlMaster config: `internal/cli/ssh.go`
 - GitHub Actions hydrate/register/dispatch bridge: `internal/cli/actions.go`
 - Cache stats/purge/warm commands: `internal/cli/cache.go`
 - Run history/log commands and retained run logs: `internal/cli/history.go`, `internal/cli/runlog.go`
@@ -74,4 +75,5 @@ Bootstrap is intentionally tiny: OpenSSH, CA certificates, curl, Git, rsync, jq,
 - CI gate: `.github/workflows/ci.yml`
 - Release workflow and Homebrew tap fallback: `.github/workflows/release.yml`
 - GoReleaser archives and Homebrew formula config: `.goreleaser.yaml`
-- Docs site builder and Pages deployment: `scripts/build-docs-site.mjs`, `.github/workflows/pages.yml`
+- Docs link check, site builder, and Pages deployment: `scripts/check-docs-links.mjs`, `scripts/build-docs-site.mjs`, `.github/workflows/pages.yml`
+- Live provider smoke coverage: `scripts/live-smoke.sh`

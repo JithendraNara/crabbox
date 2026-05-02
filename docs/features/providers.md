@@ -51,6 +51,21 @@ beast     c7a.48xlarge, c7i.48xlarge, m7a.48xlarge, m7i.48xlarge, r7a.48xlarge, 
 
 Direct provider mode still exists when no coordinator is configured. It uses local AWS credentials or `HCLOUD_TOKEN`/`HETZNER_TOKEN` and should stay secondary to the brokered path.
 
+Direct smoke shape:
+
+```sh
+tmp="$(mktemp)"
+printf 'provider: hetzner\n' > "$tmp"
+CRABBOX_CONFIG="$tmp" CRABBOX_COORDINATOR= crabbox warmup --provider hetzner --class standard --ttl 15m --idle-timeout 4m
+CRABBOX_CONFIG="$tmp" CRABBOX_COORDINATOR= crabbox run --provider hetzner --id <slug> --no-sync -- echo direct-hetzner-ok
+CRABBOX_CONFIG="$tmp" CRABBOX_COORDINATOR= crabbox stop --provider hetzner <slug>
+rm -f "$tmp"
+```
+
+Use `--provider aws` with AWS SDK credentials for direct AWS smoke. Direct mode
+has no Durable Object alarm; cleanup is best-effort through provider labels and
+manual `crabbox cleanup`.
+
 Crabbox can also wrap Blacksmith Testboxes with `provider: blacksmith-testbox`. That backend does not use the Crabbox broker or direct cloud credentials. It shells out to the authenticated Blacksmith CLI for `testbox warmup`, `run`, `status`, `list`, and `stop`, while Crabbox keeps local slugs, repo claims, config, and timing summaries. See [Blacksmith Testbox](blacksmith-testbox.md).
 
 Related docs:

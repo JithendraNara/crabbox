@@ -11,7 +11,10 @@ const sections = [
   ["Start", ["README.md", "how-it-works.md", "architecture.md", "orchestrator.md", "cli.md"]],
   ["Features", rels("features")],
   ["Commands", rels("commands")],
-  ["Operate", ["operations.md", "observability.md", "troubleshooting.md", "performance.md", "infrastructure.md", "security.md", "mvp-plan.md"]],
+  [
+    "Operate",
+    ["operations.md", "observability.md", "troubleshooting.md", "performance.md", "infrastructure.md", "security.md", "mvp-plan.md"],
+  ],
 ];
 
 fs.rmSync(outDir, { recursive: true, force: true });

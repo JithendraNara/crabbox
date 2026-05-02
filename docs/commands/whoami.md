@@ -13,7 +13,7 @@ Human output:
 user=steipete@gmail.com org=openclaw auth=github broker=https://crabbox.openclaw.ai
 ```
 
-Identity comes from Cloudflare Access email when present, then signed GitHub login tokens, then bearer-token headers. In shared bearer-token mode, the CLI sends `X-Crabbox-Owner` from `CRABBOX_OWNER`, Git email env, or `git config user.email`, and `X-Crabbox-Org` from `CRABBOX_ORG`.
+Identity normally comes from the signed GitHub login token. Shared bearer-token automation reports owner/org from `X-Crabbox-Owner` and `X-Crabbox-Org`; the CLI fills those from `CRABBOX_OWNER`, Git email env, `git config user.email`, and `CRABBOX_ORG`. If a fallback route forwards Cloudflare Access identity, that Access email wins over shared-token owner headers. JSON output also reports the forwarded auth mode, such as `github` or `bearer`.
 
 Related docs:
 

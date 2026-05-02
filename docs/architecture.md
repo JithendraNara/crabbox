@@ -14,7 +14,7 @@ The coordinator leases machines. The CLI executes work. Machines do not need to 
 developer laptop
   crabbox CLI
     |
-    | HTTPS JSON API, Cloudflare Access
+    | HTTPS JSON API, Crabbox auth
     v
 Cloudflare Worker
   Durable Object lease state
@@ -32,7 +32,7 @@ leased machine
 
 ## Lease Flow
 
-1. CLI loads config and authenticates to Cloudflare Access.
+1. CLI loads config and authenticates with a signed GitHub login token or shared operator token.
 2. CLI creates a per-lease SSH key.
 3. CLI sends `POST /v1/leases` with lease ID, slug, profile, TTL, idle timeout, desired machine class, and SSH public key.
 4. Coordinator validates identity and policy.
