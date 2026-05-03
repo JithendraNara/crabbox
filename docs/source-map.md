@@ -32,9 +32,11 @@ This page maps user-facing behavior back to implementation files. Keep docs desc
 
 - Direct Hetzner provider: `internal/cli/hcloud.go`
 - Direct AWS provider: `internal/cli/aws.go`
+- Direct static-ssh provider: `internal/cli/run.go` (acquireStaticSSH, findStaticSSHLease)
 - Blacksmith Testbox CLI wrapper: `internal/cli/blacksmith.go`
 - Worker Hetzner provider: `worker/src/hetzner.ts`
 - Worker AWS EC2 Spot provider: `worker/src/aws.ts`
+- Worker static-ssh provider: `worker/src/fleet.ts` (StaticSSHProvider class)
 - Worker AWS AMI create/read/promote routes: `worker/src/fleet.ts`, `worker/src/aws.ts`
 - CLI cloud-init bootstrap: `internal/cli/bootstrap.go`
 - Worker cloud-init bootstrap: `worker/src/bootstrap.ts`

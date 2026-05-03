@@ -109,7 +109,7 @@ Brokered backends, later:
 - `github-actions`: register or dispatch real Actions-backed runner work when workflow parity is required.
 - `external-runner`: adapter boundary for other hosted runner systems if needed.
 
-The MVP implements `hetzner-ephemeral` and `aws-spot`, and leaves interfaces ready for `hetzner-static`.
+The MVP implements `hetzner-ephemeral`, `aws-spot`, and `ssh-static` (as `provider: static-ssh`). Interfaces are left ready for `hetzner-static`.
 
 ## Machine Bootstrap
 

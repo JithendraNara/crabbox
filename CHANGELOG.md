@@ -4,6 +4,8 @@
 
 ### Added
 
+- **`static-ssh` provider.** Use any always-on Linux machine as a testbox — no cloud leasing needed. Point Crabbox at a hostname or IP, configure the SSH user and key, and run commands on your own hardware. Supports warmup, run, fingerprint-skip sync, and the full CLI surface. Works in both direct and coordinator modes. Config: `provider: static-ssh` + `static.host: <hostname>` or `CRABBOX_STATIC_SSH_HOST`.
+
 - Added a command-doc drift check to `npm run docs:check` so every top-level CLI command has a matching command page and index entry. Thanks @stainlu.
 
 ### Changed

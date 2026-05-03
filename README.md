@@ -71,15 +71,15 @@ crabbox --version
 ```yaml
 provider: static-ssh
 static:
-  host: 192.168.0.193          # or your-box.local, tailscale hostname
+  host: 192.168.1.100          # or your-box.local, tailscale hostname
 ssh:
-  user: jithendra
+  user: myuser
   key: ~/.ssh/id_ed25519
   port: "22"
-workRoot: /home/jithendra/crabbox
+workRoot: /home/myuser/crabbox
 ```
 
-Or use env vars: `CRABBOX_PROVIDER=static-ssh CRABBOX_STATIC_SSH_HOST=192.168.0.193`
+Or use env vars: `CRABBOX_PROVIDER=static-ssh CRABBOX_STATIC_SSH_HOST=192.168.1.100`
 
 ### 4. Run
 
