@@ -56,7 +56,7 @@ ssh-copy-id user@your-box.local
 
 ```bash
 # Build from source
-git clone https://github.com/JithendraNara/crabbox
+git clone https://github.com/JithendraNara/crabbox-local
 cd crabbox
 go build -o /usr/local/bin/crabbox ./cmd/crabbox
 
