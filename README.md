@@ -98,6 +98,17 @@ crabbox stop blue-prawn
 
 Every lease gets a `cbx_...` ID and a crustacean slug (`blue-prawn`, `swift-lobster`, ...).
 
+No `crabbox login` needed — that's only for the cloud broker. With `static-ssh`, all commands work directly over SSH:
+
+```bash
+crabbox doctor      # checks SSH + tools
+crabbox warmup      # leases your box
+crabbox run         # syncs + runs
+crabbox ssh --id    # prints SSH command
+crabbox status --id # checks lease state
+crabbox stop        # releases the claim
+```
+
 ---
 
 ## Also works with clouds
