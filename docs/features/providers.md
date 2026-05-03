@@ -2,15 +2,16 @@
 
 Read when:
 
-- changing Hetzner, AWS, or Blacksmith Testbox provisioning;
+- changing Hetzner, AWS, static-ssh, or Blacksmith Testbox provisioning;
 - adding a backend;
 - adjusting machine classes, fallback order, regions, or images.
 
-Crabbox currently supports two brokered providers:
+Crabbox currently supports three brokered providers plus a static direct-only provider:
 
 ```text
 hetzner     Hetzner Cloud servers
 aws         AWS EC2 one-time Spot instances
+static-ssh  Pre-existing machines reached directly over SSH (direct mode only)
 ```
 
 Hetzner behavior:
@@ -60,6 +61,15 @@ beast     c7a.48xlarge, c7i.48xlarge, m7a.48xlarge, m7i.48xlarge, r7a.48xlarge, 
 ```
 
 Direct provider mode still exists when no coordinator is configured. It uses local AWS credentials or `HCLOUD_TOKEN`/`HETZNER_TOKEN` and should stay secondary to the brokered path.
+
+Static SSH behavior:
+
+- no cloud API calls; connects directly to a pre-configured host over SSH;
+- uses the configured `ssh.key` for authentication (no per-lease key generation);
+- syncs via rsync and runs commands identically to brokered leases;
+- local claims track leases across sessions;
+- no cost tracking, no auto-expiry, no heartbeat — the machine is assumed to be always available;
+- set `provider: static-ssh` + `static.host: <hostname>` in config, or use `CRABBOX_STATIC_SSH_HOST`.
 
 Direct smoke shape:
 

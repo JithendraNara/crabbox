@@ -48,6 +48,8 @@ changing capacity.
 
 `--actions-runner` is not supported with `blacksmith-testbox` because Blacksmith owns Testbox workflow hydration.
 
+With `--provider static-ssh`, warmup creates a local claim and validates SSH reachability. No cloud provisioning occurs — the static machine must already be running and reachable. The `--keep` flag is always true for static-ssh (the machine is not destroyed on release).
+
 New leases use per-lease SSH keys under the user config directory:
 
 ```text
