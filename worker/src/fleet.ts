@@ -179,6 +179,18 @@ export class FleetDurableObject implements DurableObject {
         config.idleTimeoutSeconds,
       ).toISOString(),
     };
+    if (config.provider === "static-ssh") {
+      record.host = input.staticSSHHost ?? "";
+      record.sshPort = input.staticSSHPort ?? config.sshPort;
+      record.serverName = input.staticSSHHost ?? "static-ssh";
+      record.cloudID = "static-" + leaseID;
+      record.estimatedHourlyUSD = 0;
+      record.maxEstimatedUSD = 0;
+      record.serverType = "static";
+      await this.putLease(record);
+      await this.scheduleAlarm();
+      return json({ lease: record }, { status: 201 });
+    }
     const limitError = enforceCostLimits(leases, record, costLimits(this.env), now);
     if (limitError) {
       return json({ error: "cost_limit_exceeded", message: limitError }, { status: 429 });
@@ -749,10 +761,16 @@ export class FleetDurableObject implements DurableObject {
     if (provider === "aws") {
       return new AWSProvider(this.env, region || this.env.CRABBOX_AWS_REGION || "eu-west-1");
     }
+    if (provider === "static-ssh") {
+      return new StaticSSHProvider();
+    }
     return new HetznerProvider(this.env);
   }
 
   private async deleteLeaseServer(lease: LeaseRecord): Promise<void> {
+    if (lease.provider === "static-ssh") {
+      return;
+    }
     if (lease.provider === "aws") {
       await this.provider("aws", lease.region).deleteServer(lease.cloudID);
       if (validCrabboxProviderKey(lease.providerKey)) {
@@ -939,7 +957,7 @@ function boundedRunEvent(
   if (input.slug) {
     event.slug = truncateString(input.slug, 128);
   }
-  if (input.provider === "aws" || input.provider === "hetzner") {
+  if (input.provider === "aws" || input.provider === "hetzner" || input.provider === "static-ssh") {
     event.provider = input.provider;
   }
   if (input.class) {
@@ -1273,5 +1291,39 @@ class AWSProvider implements CloudProvider {
 
   hourlyPriceUSD(serverType: string): Promise<number | undefined> {
     return this.client.hourlySpotPriceUSD(serverType);
+  }
+}
+
+class StaticSSHProvider implements CloudProvider {
+  async listCrabboxServers(): Promise<ProviderMachine[]> {
+    return [];
+  }
+
+  async createServerWithFallback(): Promise<{
+    server: ProviderMachine;
+    serverType: string;
+    attempts?: ProvisioningAttempt[];
+  }> {
+    throw new Error("static-ssh does not provision servers");
+  }
+
+  async deleteServer(): Promise<void> {
+    // no-op for static SSH
+  }
+
+  createImage(): Promise<ProviderImage> {
+    throw new Error("static-ssh images are not supported");
+  }
+
+  getImage(): Promise<ProviderImage> {
+    throw new Error("static-ssh images are not supported");
+  }
+
+  async deleteSSHKey(): Promise<void> {
+    // no-op for static SSH
+  }
+
+  async hourlyPriceUSD(): Promise<number> {
+    return 0;
   }
 }

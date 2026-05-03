@@ -9,7 +9,7 @@ import (
 
 func (a App) inspect(ctx context.Context, args []string) error {
 	fs := newFlagSet("inspect", a.Stderr)
-	provider := fs.String("provider", defaultConfig().Provider, "provider: hetzner or aws")
+	provider := fs.String("provider", defaultConfig().Provider, "provider: hetzner, aws, or static-ssh")
 	id := fs.String("id", "", "lease id or slug")
 	jsonOut := fs.Bool("json", false, "print JSON")
 	if err := parseFlags(fs, args); err != nil {
@@ -25,7 +25,9 @@ func (a App) inspect(ctx context.Context, args []string) error {
 	if err != nil {
 		return err
 	}
-	cfg.Provider = *provider
+	if flagWasSet(fs, "provider") {
+		cfg.Provider = *provider
+	}
 	state, err := a.leaseStatus(ctx, cfg, *id)
 	if err != nil {
 		return err

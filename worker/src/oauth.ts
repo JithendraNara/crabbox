@@ -106,7 +106,7 @@ async function githubAuthStart(
     createdAt: now.toISOString(),
     expiresAt: expiresAt.toISOString(),
   };
-  if (input.provider === "aws" || input.provider === "hetzner") {
+  if (input.provider === "aws" || input.provider === "hetzner" || input.provider === "static-ssh") {
     pending.provider = input.provider;
   }
   await storage.put(oauthKey(id), pending);

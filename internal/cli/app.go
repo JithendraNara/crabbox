@@ -170,11 +170,11 @@ Global:
   --version      Print version
 
 Config:
-  crabbox login [--url <url>] [--provider aws|hetzner] [--no-browser]
-  crabbox login --url <url> --token-stdin [--provider aws|hetzner]
+  crabbox login [--url <url>] [--provider aws|hetzner|static-ssh] [--no-browser]
+  crabbox login --url <url> --token-stdin [--provider aws|hetzner|static-ssh]
   crabbox config path
   crabbox config show [--json]
-  crabbox config set-broker --url <url> --token-stdin [--provider aws|hetzner]
+  crabbox config set-broker --url <url> --token-stdin [--provider aws|hetzner|static-ssh]
 
 Environment:
   CRABBOX_COORDINATOR          Broker URL

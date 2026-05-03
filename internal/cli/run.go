@@ -28,7 +28,7 @@ func (a App) warmup(ctx context.Context, args []string) error {
 	started := time.Now()
 	defaults := defaultConfig()
 	fs := newFlagSet("warmup", a.Stderr)
-	provider := fs.String("provider", defaults.Provider, "provider: hetzner, aws, or blacksmith-testbox")
+	provider := fs.String("provider", defaults.Provider, "provider: hetzner, aws, static-ssh, or blacksmith-testbox")
 	profile := fs.String("profile", defaults.Profile, "profile")
 	class := fs.String("class", defaults.Class, "machine class")
 	serverType := fs.String("type", getenv("CRABBOX_SERVER_TYPE", ""), "provider server/instance type")
@@ -47,7 +47,9 @@ func (a App) warmup(ctx context.Context, args []string) error {
 	if err != nil {
 		return err
 	}
-	cfg.Provider = *provider
+	if flagWasSet(fs, "provider") {
+		cfg.Provider = *provider
+	}
 	cfg.Profile = *profile
 	cfg.Class = *class
 	if flagWasSet(fs, "type") {
@@ -134,7 +136,7 @@ func (a App) warmup(ctx context.Context, args []string) error {
 func (a App) runCommand(ctx context.Context, args []string) (err error) {
 	defaults := defaultConfig()
 	fs := newFlagSet("run", a.Stderr)
-	provider := fs.String("provider", defaults.Provider, "provider: hetzner, aws, or blacksmith-testbox")
+	provider := fs.String("provider", defaults.Provider, "provider: hetzner, aws, static-ssh, or blacksmith-testbox")
 	profile := fs.String("profile", defaults.Profile, "profile")
 	class := fs.String("class", defaults.Class, "machine class")
 	serverType := fs.String("type", getenv("CRABBOX_SERVER_TYPE", ""), "provider server/instance type")
@@ -168,7 +170,9 @@ func (a App) runCommand(ctx context.Context, args []string) (err error) {
 	if err != nil {
 		return err
 	}
-	cfg.Provider = *provider
+	if flagWasSet(fs, "provider") {
+		cfg.Provider = *provider
+	}
 	cfg.Profile = *profile
 	cfg.Class = *class
 	if flagWasSet(fs, "type") {
@@ -643,9 +647,23 @@ func shouldUseShell(command []string) bool {
 func (a App) acquireCoordinator(ctx context.Context, cfg Config, coord *CoordinatorClient, keep bool) (Server, SSHTarget, string, error) {
 	leaseID := newLeaseID()
 	slug := newLeaseSlug(leaseID)
-	keyPath, publicKey, err := ensureTestboxKey(leaseID)
-	if err != nil {
-		return Server{}, SSHTarget{}, "", err
+	var keyPath, publicKey string
+	if cfg.Provider == "static-ssh" {
+		keyPath = cfg.SSHKey
+		if keyPath == "" {
+			return Server{}, SSHTarget{}, "", exit(2, "ssh.key is required for static-ssh coordinator leases")
+		}
+		pub, err := publicKeyFor(keyPath)
+		if err != nil {
+			return Server{}, SSHTarget{}, "", err
+		}
+		publicKey = pub
+	} else {
+		var err error
+		keyPath, publicKey, err = ensureTestboxKey(leaseID)
+		if err != nil {
+			return Server{}, SSHTarget{}, "", err
+		}
 	}
 	cfg.SSHKey = keyPath
 	cfg.ProviderKey = providerKeyForLease(leaseID)
@@ -785,8 +803,10 @@ func (a App) releaseAcquiredLeaseBestEffort(ctx context.Context, cfg Config, coo
 		if err := releaseCoordinatorLease(ctx, coord, leaseID); err != nil {
 			fmt.Fprintf(a.Stderr, "warning: release failed for %s: %v\n", leaseID, err)
 		}
-	} else if err := deleteServer(ctx, cfg, server); err != nil {
-		fmt.Fprintf(a.Stderr, "warning: delete failed for %s: %v\n", leaseID, err)
+	} else if server.Provider != "static-ssh" {
+		if err := deleteServer(ctx, cfg, server); err != nil {
+			fmt.Fprintf(a.Stderr, "warning: delete failed for %s: %v\n", leaseID, err)
+		}
 	}
 	removeLeaseClaim(leaseID)
 }
@@ -918,6 +938,9 @@ func (a App) touchActiveLeaseBestEffort(ctx context.Context, cfg Config, server 
 }
 
 func (a App) touchDirectLeaseBestEffort(ctx context.Context, cfg Config, server Server, state string) Server {
+	if cfg.Provider == "static-ssh" || server.Provider == "static-ssh" {
+		return server
+	}
 	if server.Labels == nil {
 		server.Labels = map[string]string{}
 	}
@@ -944,7 +967,49 @@ func (a App) touchDirectLeaseBestEffort(ctx context.Context, cfg Config, server 
 	return server
 }
 
+func (a App) acquireStaticSSH(ctx context.Context, cfg Config) (Server, SSHTarget, string, error) {
+	if cfg.StaticSSHHost == "" {
+		return Server{}, SSHTarget{}, "", exit(2, "static-ssh requires static.host in config or CRABBOX_STATIC_SSH_HOST")
+	}
+	leaseID := newLeaseID()
+	slug := newLeaseSlug(leaseID)
+	target := SSHTarget{
+		User:          cfg.SSHUser,
+		Host:          cfg.StaticSSHHost,
+		Key:           cfg.SSHKey,
+		Port:          cfg.SSHPort,
+		FallbackPorts: cfg.SSHFallbackPorts,
+	}
+	server := Server{
+		CloudID:  "static-" + leaseID,
+		Provider: "static-ssh",
+		Name:     cfg.StaticSSHHost,
+		Status:   "ready",
+		Labels: map[string]string{
+			"lease": leaseID,
+			"slug":  slug,
+			"state": "ready",
+		},
+	}
+	server.ServerType.Name = "static"
+	server.PublicNet.IPv4.IP = cfg.StaticSSHHost
+	cp := sshControlPath(target)
+	if dir := strings.TrimSuffix(cp, "%C"); dir != cp {
+		if err := os.MkdirAll(dir, 0o700); err != nil {
+			fmt.Fprintf(a.Stderr, "warning: could not create control path directory: %v\n", err)
+		}
+	}
+	fmt.Fprintf(a.Stderr, "using static-ssh host=%s user=%s slug=%s\n", cfg.StaticSSHHost, cfg.SSHUser, slug)
+	if err := waitForSSH(ctx, &target, a.Stderr); err != nil {
+		return Server{}, SSHTarget{}, "", err
+	}
+	return server, target, leaseID, nil
+}
+
 func (a App) acquire(ctx context.Context, cfg Config, keep bool) (Server, SSHTarget, string, error) {
+	if cfg.Provider == "static-ssh" {
+		return a.acquireStaticSSH(ctx, cfg)
+	}
 	if cfg.Provider == "aws" {
 		return a.acquireAWS(ctx, cfg, keep)
 	}
@@ -1088,7 +1153,47 @@ func waitForServerIP(ctx context.Context, client *HetznerClient, id int64) (Serv
 	}
 }
 
+func (a App) findStaticSSHLease(id string, cfg Config) (Server, SSHTarget, string, error) {
+	if cfg.StaticSSHHost == "" {
+		return Server{}, SSHTarget{}, "", exit(2, "static-ssh requires static.host in config or CRABBOX_STATIC_SSH_HOST")
+	}
+	claim, ok, err := resolveLeaseClaim(id)
+	if err != nil {
+		return Server{}, SSHTarget{}, "", err
+	}
+	if !ok {
+		return Server{}, SSHTarget{}, "", exit(4, "lease not found: %s (no claim file)", id)
+	}
+	leaseID := claim.LeaseID
+	slug := claim.Slug
+	target := SSHTarget{
+		User:          cfg.SSHUser,
+		Host:          cfg.StaticSSHHost,
+		Key:           cfg.SSHKey,
+		Port:          cfg.SSHPort,
+		FallbackPorts: cfg.SSHFallbackPorts,
+	}
+	useStoredTestboxKey(&target, leaseID)
+	server := Server{
+		CloudID:  "static-" + leaseID,
+		Provider: "static-ssh",
+		Name:     cfg.StaticSSHHost,
+		Status:   "ready",
+		Labels: map[string]string{
+			"lease": leaseID,
+			"slug":  slug,
+			"state": "ready",
+		},
+	}
+	server.ServerType.Name = "static"
+	server.PublicNet.IPv4.IP = cfg.StaticSSHHost
+	return server, target, leaseID, nil
+}
+
 func (a App) findLease(ctx context.Context, cfg Config, id string) (Server, SSHTarget, string, error) {
+	if cfg.Provider == "static-ssh" {
+		return a.findStaticSSHLease(id, cfg)
+	}
 	if cfg.Provider == "aws" {
 		return a.findAWSLease(ctx, cfg, id)
 	}
@@ -1191,7 +1296,7 @@ func findServerByAlias(servers []Server, id string) (Server, string, error) {
 
 func (a App) stop(ctx context.Context, args []string) error {
 	fs := newFlagSet("stop", a.Stderr)
-	provider := fs.String("provider", defaultConfig().Provider, "provider: hetzner, aws, or blacksmith-testbox")
+	provider := fs.String("provider", defaultConfig().Provider, "provider: hetzner, aws, static-ssh, or blacksmith-testbox")
 	if err := parseFlags(fs, args); err != nil {
 		return err
 	}
@@ -1202,9 +1307,23 @@ func (a App) stop(ctx context.Context, args []string) error {
 	if err != nil {
 		return err
 	}
-	cfg.Provider = *provider
+	if flagWasSet(fs, "provider") {
+		cfg.Provider = *provider
+	}
 	if isBlacksmithProvider(cfg.Provider) {
 		return a.blacksmithStop(ctx, cfg, fs.Arg(0))
+	}
+	if cfg.Provider == "static-ssh" {
+		claim, ok, err := resolveLeaseClaim(fs.Arg(0))
+		if err != nil {
+			return err
+		}
+		if !ok {
+			return exit(4, "lease not found: %s", fs.Arg(0))
+		}
+		removeLeaseClaim(claim.LeaseID)
+		fmt.Fprintf(a.Stdout, "stopped static-ssh lease=%s slug=%s\n", claim.LeaseID, blank(claim.Slug, "-"))
+		return nil
 	}
 	if coord, ok, err := newCoordinatorClient(cfg); err != nil {
 		return err
@@ -1255,6 +1374,9 @@ func leaseDisplayID(lease CoordinatorLease) string {
 }
 
 func deleteServer(ctx context.Context, cfg Config, server Server) error {
+	if cfg.Provider == "static-ssh" || server.Provider == "static-ssh" {
+		return nil
+	}
 	if cfg.Provider == "aws" || server.Provider == "aws" || strings.HasPrefix(server.CloudID, "i-") {
 		client, err := newAWSClient(ctx, cfg)
 		if err != nil {

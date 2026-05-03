@@ -65,7 +65,7 @@ crabbox CLI    -- HTTPS --> Fleet Durable Object  -->   Hetzner / AWS Spot
 - **Broker** — Cloudflare Worker at `crabbox.openclaw.ai` plus a single Durable Object. Owns provider credentials, serializes lease state, enforces active-lease and monthly spend caps, and expires stale leases by alarm. Auth is GitHub login or a shared bearer token.
 - **Runner** — vanilla Ubuntu prepared by cloud-init with SSH on the primary port, default `2222`, plus configured fallback ports, Git, rsync, curl, jq, and `/work/crabbox`. No broker credentials live on the box. Project runtimes (Go, Node, Docker, services, secrets) come from your repo's GitHub Actions hydration, devcontainer, Nix, mise/asdf, or setup scripts — not from Crabbox.
 
-A direct-provider mode (`--provider hetzner|aws` with local credentials) exists for debugging the broker itself; the brokered path is the default.
+A direct-provider mode (`--provider hetzner|aws|static-ssh` with local credentials) exists for debugging the broker itself; the brokered path is the default.
 
 For the full mental model, see [How Crabbox Works](docs/how-it-works.md). For the doc-to-code map, see [Source Map](docs/source-map.md).
 

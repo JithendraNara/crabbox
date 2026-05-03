@@ -37,7 +37,7 @@ export interface LeaseConfig {
 
 export function leaseConfig(input: LeaseRequest): LeaseConfig {
   const provider = input.provider ?? "hetzner";
-  if (provider !== "hetzner" && provider !== "aws") {
+  if (provider !== "hetzner" && provider !== "aws" && provider !== "static-ssh") {
     throw new Error(`unsupported provider: ${String(provider)}`);
   }
   const machineClass = input.class ?? "beast";

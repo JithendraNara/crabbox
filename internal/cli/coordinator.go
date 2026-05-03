@@ -322,6 +322,8 @@ func (c *CoordinatorClient) CreateLease(ctx context.Context, cfg Config, publicK
 		"idleTimeoutSeconds": int(cfg.IdleTimeout.Seconds()),
 		"keep":               keep,
 		"sshPublicKey":       publicKey,
+		"staticSSHHost":       cfg.StaticSSHHost,
+		"staticSSHPort":       cfg.SSHPort,
 	}, &res)
 	return res.Lease, err
 }

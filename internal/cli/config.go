@@ -44,6 +44,7 @@ type Config struct {
 	Capacity           CapacityConfig
 	Actions            ActionsConfig
 	Blacksmith         BlacksmithConfig
+	StaticSSHHost      string
 	Results            ResultsConfig
 	Cache              CacheConfig
 }
@@ -200,6 +201,7 @@ type fileConfig struct {
 	Hetzner          *fileHetznerConfig    `yaml:"hetzner,omitempty"`
 	AWS              *fileAWSConfig        `yaml:"aws,omitempty"`
 	SSH              *fileSSHConfig        `yaml:"ssh,omitempty"`
+	Static           *fileStaticSSHConfig  `yaml:"static,omitempty"`
 	Sync             *fileSyncConfig       `yaml:"sync,omitempty"`
 	Env              *fileEnvConfig        `yaml:"env,omitempty"`
 	Capacity         *fileCapacityConfig   `yaml:"capacity,omitempty"`
@@ -248,6 +250,10 @@ type fileSSHConfig struct {
 	Key           string    `yaml:"key,omitempty"`
 	Port          string    `yaml:"port,omitempty"`
 	FallbackPorts *[]string `yaml:"fallbackPorts,omitempty"`
+}
+
+type fileStaticSSHConfig struct {
+	Host string `yaml:"host,omitempty"`
 }
 
 type fileSyncConfig struct {
@@ -504,6 +510,11 @@ func applyFileConfig(cfg *Config, file fileConfig) {
 			cfg.SSHFallbackPorts = normalizeList(*file.SSH.FallbackPorts)
 		}
 	}
+	if file.Static != nil {
+		if file.Static.Host != "" {
+			cfg.StaticSSHHost = file.Static.Host
+		}
+	}
 	if file.WorkRoot != "" {
 		cfg.WorkRoot = file.WorkRoot
 	}
@@ -681,6 +692,7 @@ func applyEnv(cfg *Config) {
 	if ports, ok := getenvList("CRABBOX_SSH_FALLBACK_PORTS"); ok {
 		cfg.SSHFallbackPorts = ports
 	}
+	cfg.StaticSSHHost = getenv("CRABBOX_STATIC_SSH_HOST", cfg.StaticSSHHost)
 	cfg.ProviderKey = getenv("CRABBOX_HETZNER_SSH_KEY", cfg.ProviderKey)
 	cfg.WorkRoot = getenv("CRABBOX_WORK_ROOT", cfg.WorkRoot)
 	if ttl := os.Getenv("CRABBOX_TTL"); ttl != "" {

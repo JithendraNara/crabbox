@@ -63,11 +63,9 @@ func waitForSSHReady(ctx context.Context, target *SSHTarget, stderr io.Writer, p
 		for _, port := range sshPortCandidates(target.Port, target.FallbackPorts) {
 			probe := *target
 			probe.Port = port
-			conn, err := net.DialTimeout("tcp", net.JoinHostPort(probe.Host, probe.Port), 5*time.Second)
-			if err != nil {
+			if !tcpReachable(ctx, probe.Host, probe.Port, 5*time.Second) {
 				continue
 			}
-			_ = conn.Close()
 			if reachablePort == "" {
 				reachablePort = probe.Port
 			}
@@ -105,12 +103,9 @@ func probeSSHReady(ctx context.Context, target *SSHTarget, timeout time.Duration
 	for _, port := range sshPortCandidates(target.Port, target.FallbackPorts) {
 		probe := *target
 		probe.Port = port
-		dialer := net.Dialer{Timeout: minDuration(timeout, 2*time.Second)}
-		conn, err := dialer.DialContext(ctx, "tcp", net.JoinHostPort(probe.Host, probe.Port))
-		if err != nil {
+		if !tcpReachable(ctx, probe.Host, probe.Port, minDuration(timeout, 2*time.Second)) {
 			continue
 		}
-		_ = conn.Close()
 		if runSSHQuietWithOptions(ctx, probe, sshReadyCommand(), "2", "1") == nil {
 			target.Port = probe.Port
 			return true
@@ -570,4 +565,17 @@ func exitCode(err error) int {
 func parseServerID(s string) (int64, bool) {
 	id, err := strconv.ParseInt(s, 10, 64)
 	return id, err == nil
+}
+
+func tcpReachable(ctx context.Context, host, port string, timeout time.Duration) bool {
+	if conn, err := net.DialTimeout("tcp", net.JoinHostPort(host, port), timeout); err == nil {
+		_ = conn.Close()
+		return true
+	}
+	ncCtx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+	cmd := exec.CommandContext(ncCtx, "nc", "-z", host, port)
+	cmd.Stdout = io.Discard
+	cmd.Stderr = io.Discard
+	return cmd.Run() == nil
 }

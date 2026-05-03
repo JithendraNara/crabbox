@@ -25,15 +25,15 @@ Primary output goes to stdout. Progress, diagnostics, and errors go to stderr. J
 
 ```text
 crabbox doctor
-crabbox login [--url <url>] [--provider hetzner|aws] [--no-browser]
-crabbox login --url <url> --token-stdin [--provider hetzner|aws]
+crabbox login [--url <url>] [--provider hetzner|aws|static-ssh] [--no-browser]
+crabbox login --url <url> --token-stdin [--provider hetzner|aws|static-ssh]
 crabbox logout
 crabbox whoami [--json]
 crabbox init [--force]
 crabbox config show [--json]
 crabbox config path
-crabbox config set-broker --url <url> --token-stdin [--provider hetzner|aws]
-crabbox warmup [--provider hetzner|aws|blacksmith-testbox] [--profile <name>] [--idle-timeout <duration>] [--timing-json]
+crabbox config set-broker --url <url> --token-stdin [--provider hetzner|aws|static-ssh]
+crabbox warmup [--provider hetzner|aws|static-ssh|static-ssh|blacksmith-testbox] [--profile <name>] [--idle-timeout <duration>] [--timing-json]
 crabbox run [--id <lease-id-or-slug>] [--shell] [--checksum] [--debug] [--force-sync-large] [--timing-json] [--blacksmith-workflow <workflow>] -- <command...>
 crabbox sync-plan [--limit <n>]
 crabbox history [--lease <lease-id>] [--owner <email>] [--org <name>] [--limit <n>] [--json]

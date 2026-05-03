@@ -7,7 +7,7 @@ import (
 
 func (a App) ssh(ctx context.Context, args []string) error {
 	fs := newFlagSet("ssh", a.Stderr)
-	provider := fs.String("provider", defaultConfig().Provider, "provider: hetzner or aws")
+	provider := fs.String("provider", defaultConfig().Provider, "provider: hetzner, aws, or static-ssh")
 	id := fs.String("id", "", "lease id or slug")
 	reclaim := fs.Bool("reclaim", false, "claim this lease for the current repo")
 	if err := parseFlags(fs, args); err != nil {
@@ -23,7 +23,9 @@ func (a App) ssh(ctx context.Context, args []string) error {
 	if err != nil {
 		return err
 	}
-	cfg.Provider = *provider
+	if flagWasSet(fs, "provider") {
+		cfg.Provider = *provider
+	}
 	server, target, leaseID, err := a.resolveLeaseTarget(ctx, cfg, *id)
 	if err != nil {
 		return err

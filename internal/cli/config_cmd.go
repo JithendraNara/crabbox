@@ -144,7 +144,7 @@ func (a App) configShow(args []string) error {
 func (a App) configSetBroker(args []string) error {
 	fs := newFlagSet("config set-broker", a.Stderr)
 	url := fs.String("url", "", "broker URL")
-	provider := fs.String("provider", "", "default provider: hetzner or aws")
+	provider := fs.String("provider", "", "default provider: hetzner, aws, or static-ssh")
 	tokenStdin := fs.Bool("token-stdin", false, "read broker token from stdin")
 	adminTokenStdin := fs.Bool("admin-token-stdin", false, "read broker admin token from stdin")
 	if err := parseFlags(fs, args); err != nil {

@@ -12,7 +12,7 @@ Flags:
 
 ```text
 --id <lease-id-or-slug>
---provider hetzner|aws
+--provider hetzner|aws|static-ssh
 --reclaim
 ```
 

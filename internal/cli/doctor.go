@@ -5,11 +5,12 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"time"
 )
 
 func (a App) doctor(ctx context.Context, args []string) error {
 	fs := newFlagSet("doctor", a.Stderr)
-	provider := fs.String("provider", defaultConfig().Provider, "provider: hetzner or aws")
+	provider := fs.String("provider", defaultConfig().Provider, "provider: hetzner, aws, or static-ssh")
 	id := fs.String("id", "", "remote lease id to inspect")
 	if err := parseFlags(fs, args); err != nil {
 		return err
@@ -38,7 +39,9 @@ func (a App) doctor(ctx context.Context, args []string) error {
 			fmt.Fprintf(a.Stdout, "ok      config   %s permissions=0600\n", path)
 		}
 	}
-	cfg.Provider = *provider
+	if flagWasSet(fs, "provider") {
+		cfg.Provider = *provider
+	}
 	if *id != "" {
 		_, target, _, err := a.resolveLeaseTarget(ctx, cfg, *id)
 		if err != nil {
@@ -109,6 +112,25 @@ func (a App) doctor(ctx context.Context, args []string) error {
 	}
 
 	switch cfg.Provider {
+	case "static-ssh":
+		if cfg.StaticSSHHost == "" {
+			fmt.Fprintf(a.Stdout, "failed  static-ssh  static.host not configured\n")
+			ok = false
+		} else {
+			target := SSHTarget{
+				User:          cfg.SSHUser,
+				Host:          cfg.StaticSSHHost,
+				Key:           cfg.SSHKey,
+				Port:          cfg.SSHPort,
+				FallbackPorts: cfg.SSHFallbackPorts,
+			}
+			if probeSSHReady(ctx, &target, 5*time.Second) {
+				fmt.Fprintf(a.Stdout, "ok      static-ssh host=%s user=%s port=%s\n", cfg.StaticSSHHost, cfg.SSHUser, cfg.SSHPort)
+			} else {
+				fmt.Fprintf(a.Stdout, "failed  static-ssh host=%s user=%s port=%s: SSH not reachable\n", cfg.StaticSSHHost, cfg.SSHUser, cfg.SSHPort)
+				ok = false
+			}
+		}
 	case "aws":
 		client, err := newAWSClient(ctx, cfg)
 		if err != nil {

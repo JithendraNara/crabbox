@@ -68,9 +68,11 @@ export interface LeaseRequest {
   idleTimeoutSeconds?: number;
   keep?: boolean;
   sshPublicKey?: string;
+  staticSSHHost?: string;
+  staticSSHPort?: string;
 }
 
-export type Provider = "hetzner" | "aws";
+export type Provider = "hetzner" | "aws" | "static-ssh";
 
 export interface LeaseRecord {
   id: string;

@@ -15,5 +15,5 @@ matching `.pub` file.
 Flags:
 
 ```text
---provider hetzner|aws
+--provider hetzner|aws|static-ssh
 ```

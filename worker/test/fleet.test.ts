@@ -1061,7 +1061,7 @@ function testFleet(storage = new MemoryStorage(), providers = {}): FleetDurableO
 function fakeProvider(
   onCreate?: (config: { awsSSHCIDRs: string[] }) => void,
   result: {
-    provider?: "hetzner" | "aws";
+    provider?: "hetzner" | "aws" | "static-ssh";
     serverType?: string;
     cloudID?: string;
     attempts?: ProvisioningAttempt[];

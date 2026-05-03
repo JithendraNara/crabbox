@@ -14,7 +14,7 @@ Direct cleanup skips kept machines, deletes expired ready/leased/active machines
 Flags:
 
 ```text
---provider hetzner|aws
+--provider hetzner|aws|static-ssh
 --dry-run
 ```
 

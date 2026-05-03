@@ -41,7 +41,7 @@ Flags:
 
 ```text
 --id <lease-id-or-slug>
---provider hetzner|aws|blacksmith-testbox
+--provider hetzner|aws|static-ssh|static-ssh|blacksmith-testbox
 --profile <name>
 --class <name>
 --type <provider-type>
